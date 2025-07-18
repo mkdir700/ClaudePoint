@@ -18,20 +18,26 @@ import { initializeSlashCommands } from './lib/slash-commands.js';
 
 class ClaudePointMCPServer {
   constructor() {
-    this.server = new Server(
-      {
-        name: 'claudepoint',
-        version: '1.1.2',
-      },
-      {
-        capabilities: {
-          tools: {},
+    try {
+      this.server = new Server(
+        {
+          name: 'claudepoint',
+          version: '1.1.2',
         },
-      }
-    );
+        {
+          capabilities: {
+            tools: {},
+          },
+        }
+      );
 
-    this.manager = new CheckpointManager();
-    this.setupToolHandlers();
+      this.manager = new CheckpointManager();
+      this.setupToolHandlers();
+    } catch (error) {
+      console.error('Failed to initialize ClaudePoint MCP server:', error);
+      console.error('Error details:', error.stack);
+      throw error;
+    }
   }
 
   setupToolHandlers() {
@@ -540,10 +546,28 @@ class ClaudePointMCPServer {
   }
 
   async start() {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error('ClaudePoint MCP server running on stdio');
-    console.error('Available tools: setup_claudepoint, create_checkpoint, list_checkpoints, restore_checkpoint, get_changelog, set_changelog, init_slash_commands');
+    try {
+      const transport = new StdioServerTransport();
+      await this.server.connect(transport);
+      console.error('ClaudePoint MCP server running on stdio');
+      console.error('Available tools: setup_claudepoint, create_checkpoint, list_checkpoints, restore_checkpoint, get_changelog, set_changelog, init_slash_commands');
+      
+      // Keep the process alive
+      process.on('SIGINT', () => {
+        console.error('MCP server shutting down...');
+        process.exit(0);
+      });
+      
+      process.on('SIGTERM', () => {
+        console.error('MCP server shutting down...');
+        process.exit(0);
+      });
+      
+    } catch (error) {
+      console.error('Failed to start MCP server:', error);
+      console.error('Error details:', error.stack);
+      process.exit(1);
+    }
   }
 }
 
@@ -551,6 +575,20 @@ class ClaudePointMCPServer {
 const server = new ClaudePointMCPServer();
 server.start().catch(error => {
   console.error('Failed to start server:', error);
+  console.error('Error stack:', error.stack);
+  process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit the process for unhandled rejections in MCP server
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
   process.exit(1);
 });
 
