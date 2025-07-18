@@ -11,8 +11,8 @@ const isMCPServer = !process.stdin.isTTY && !process.stdout.isTTY;
 
 if (isMCPServer) {
   // Running as MCP server via Claude Code
-  require('../src/mcp-server.js');
+  import('../src/mcp-server.js');
 } else {
   // Running as CLI
-  require('../src/cli.js');
+  import('../src/cli.js');
 }

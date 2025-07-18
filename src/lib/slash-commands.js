@@ -1,11 +1,13 @@
-const fs = require('fs').promises;
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+
+const { promises: fsPromises } = fs;
 
 async function initializeSlashCommands(projectRoot = process.cwd()) {
   const commandsDir = path.join(projectRoot, '.claude', 'commands');
   
   // Create commands directory
-  await fs.mkdir(commandsDir, { recursive: true });
+  await fsPromises.mkdir(commandsDir, { recursive: true });
   
   // Create /create-checkpoint command
   const createCheckpointContent = `---
@@ -78,10 +80,10 @@ Format the output clearly to give a quick overview of the checkpoint system stat
 `;
   
   // Write all command files
-  await fs.writeFile(path.join(commandsDir, 'create-checkpoint.md'), createCheckpointContent);
-  await fs.writeFile(path.join(commandsDir, 'restore-checkpoint.md'), restoreCheckpointContent);
-  await fs.writeFile(path.join(commandsDir, 'list-checkpoints.md'), listCheckpointsContent);
-  await fs.writeFile(path.join(commandsDir, 'checkpoint-status.md'), checkpointStatusContent);
+  await fsPromises.writeFile(path.join(commandsDir, 'create-checkpoint.md'), createCheckpointContent);
+  await fsPromises.writeFile(path.join(commandsDir, 'restore-checkpoint.md'), restoreCheckpointContent);
+  await fsPromises.writeFile(path.join(commandsDir, 'list-checkpoints.md'), listCheckpointsContent);
+  await fsPromises.writeFile(path.join(commandsDir, 'checkpoint-status.md'), checkpointStatusContent);
   
   return {
     success: true,
@@ -94,4 +96,4 @@ Format the output clearly to give a quick overview of the checkpoint system stat
   };
 }
 
-module.exports = { initializeSlashCommands };
+export { initializeSlashCommands };

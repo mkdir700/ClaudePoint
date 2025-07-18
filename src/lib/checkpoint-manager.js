@@ -1,6 +1,8 @@
-const fs = require('fs').promises;
-const path = require('path');
-const tar = require('tar');
+import fs from 'fs';
+import path from 'path';
+import tar from 'tar';
+
+const { promises: fsPromises } = fs;
 
 class CheckpointManager {
   constructor(projectRoot = process.cwd()) {
@@ -12,8 +14,8 @@ class CheckpointManager {
   }
 
   async ensureDirectories() {
-    await fs.mkdir(this.checkpointDir, { recursive: true });
-    await fs.mkdir(this.snapshotsDir, { recursive: true });
+    await fsPromises.mkdir(this.checkpointDir, { recursive: true });
+    await fsPromises.mkdir(this.snapshotsDir, { recursive: true });
   }
 
   async loadConfig() {
@@ -31,14 +33,14 @@ class CheckpointManager {
     };
 
     try {
-      const configData = await fs.readFile(this.configFile, 'utf8');
+      const configData = await fsPromises.readFile(this.configFile, 'utf8');
       const config = JSON.parse(configData);
       // Merge with defaults for any missing keys
       return { ...defaultConfig, ...config };
     } catch (error) {
       // Create default config file
       await this.ensureDirectories();
-      await fs.writeFile(this.configFile, JSON.stringify(defaultConfig, null, 2));
+      await fsPromises.writeFile(this.configFile, JSON.stringify(defaultConfig, null, 2));
       return defaultConfig;
     }
   }
@@ -50,7 +52,7 @@ class CheckpointManager {
     // Check gitignore if it exists
     try {
       const gitignorePath = path.join(this.projectRoot, '.gitignore');
-      const gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
+      const gitignoreContent = await fsPromises.readFile(gitignorePath, 'utf8');
       const gitignorePatterns = gitignoreContent
         .split('\n')
         .map(line => line.trim())
@@ -93,7 +95,7 @@ class CheckpointManager {
     
     async function walkDir(dir) {
       try {
-        const entries = await fs.readdir(dir, { withFileTypes: true });
+        const entries = await fsPromises.readdir(dir, { withFileTypes: true });
         
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name);
@@ -147,7 +149,7 @@ class CheckpointManager {
       try {
         let gitignoreContent = '';
         try {
-          gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
+          gitignoreContent = await fsPromises.readFile(gitignorePath, 'utf8');
         } catch (error) {
           // File doesn't exist, will create new one
         }
@@ -156,7 +158,7 @@ class CheckpointManager {
           const newContent = gitignoreContent + 
             (gitignoreContent && !gitignoreContent.endsWith('\n') ? '\n' : '') +
             '\n# ClaudPoint checkpoint system\n' + gitignoreEntry + '\n';
-          await fs.writeFile(gitignorePath, newContent);
+          await fsPromises.writeFile(gitignorePath, newContent);
         }
       } catch (error) {
         // Could not update .gitignore, continue
@@ -202,13 +204,13 @@ class CheckpointManager {
 
       const checkpointName = this.generateCheckpointName(name, description);
       const checkpointPath = path.join(this.snapshotsDir, checkpointName);
-      await fs.mkdir(checkpointPath, { recursive: true });
+      await fsPromises.mkdir(checkpointPath, { recursive: true });
 
       // Calculate total size
       let totalSize = 0;
       for (const file of files) {
         try {
-          const stats = await fs.stat(path.join(this.projectRoot, file));
+          const stats = await fsPromises.stat(path.join(this.projectRoot, file));
           totalSize += stats.size;
         } catch (error) {
           // File might have been deleted, skip
@@ -225,7 +227,7 @@ class CheckpointManager {
         totalSize: totalSize
       };
 
-      await fs.writeFile(
+      await fsPromises.writeFile(
         path.join(checkpointPath, 'manifest.json'),
         JSON.stringify(manifest, null, 2)
       );
@@ -304,7 +306,7 @@ class CheckpointManager {
       for (const file of filesToDelete) {
         const fullPath = path.join(this.projectRoot, file);
         try {
-          await fs.unlink(fullPath);
+          await fsPromises.unlink(fullPath);
         } catch (error) {
           // File already gone, continue
         }
@@ -341,14 +343,14 @@ class CheckpointManager {
   async getCheckpoints() {
     try {
       await this.ensureDirectories();
-      const entries = await fs.readdir(this.snapshotsDir, { withFileTypes: true });
+      const entries = await fsPromises.readdir(this.snapshotsDir, { withFileTypes: true });
       const checkpoints = [];
 
       for (const entry of entries) {
         if (entry.isDirectory()) {
           const manifestPath = path.join(this.snapshotsDir, entry.name, 'manifest.json');
           try {
-            const manifestData = await fs.readFile(manifestPath, 'utf8');
+            const manifestData = await fsPromises.readFile(manifestPath, 'utf8');
             const manifest = JSON.parse(manifestData);
             checkpoints.push(manifest);
           } catch (error) {
@@ -372,7 +374,7 @@ class CheckpointManager {
       for (const checkpoint of toDelete) {
         const checkpointPath = path.join(this.snapshotsDir, checkpoint.name);
         try {
-          await fs.rm(checkpointPath, { recursive: true, force: true });
+          await fsPromises.rm(checkpointPath, { recursive: true, force: true });
         } catch (error) {
           // Continue on error
         }
@@ -383,7 +385,7 @@ class CheckpointManager {
   async cleanupEmptyDirectories() {
     const walkAndClean = async (dir) => {
       try {
-        const entries = await fs.readdir(dir, { withFileTypes: true });
+        const entries = await fsPromises.readdir(dir, { withFileTypes: true });
         
         for (const entry of entries) {
           if (entry.isDirectory()) {
@@ -392,9 +394,9 @@ class CheckpointManager {
             
             // Try to remove if empty
             try {
-              const remaining = await fs.readdir(fullPath);
+              const remaining = await fsPromises.readdir(fullPath);
               if (remaining.length === 0) {
-                await fs.rmdir(fullPath);
+                await fsPromises.rmdir(fullPath);
               }
             } catch (error) {
               // Directory not empty or other error, continue
@@ -426,7 +428,7 @@ class CheckpointManager {
     try {
       let changelog = [];
       try {
-        const changelogData = await fs.readFile(this.changelogFile, 'utf8');
+        const changelogData = await fsPromises.readFile(this.changelogFile, 'utf8');
         changelog = JSON.parse(changelogData);
       } catch (error) {
         // File doesn't exist yet, start with empty array
@@ -446,7 +448,7 @@ class CheckpointManager {
         changelog = changelog.slice(0, 50);
       }
 
-      await fs.writeFile(this.changelogFile, JSON.stringify(changelog, null, 2));
+      await fsPromises.writeFile(this.changelogFile, JSON.stringify(changelog, null, 2));
     } catch (error) {
       // Don't fail the main operation if changelog fails
       console.error('Warning: Could not update changelog:', error.message);
@@ -455,7 +457,7 @@ class CheckpointManager {
 
   async getChangelog() {
     try {
-      const changelogData = await fs.readFile(this.changelogFile, 'utf8');
+      const changelogData = await fsPromises.readFile(this.changelogFile, 'utf8');
       const changelog = JSON.parse(changelogData);
       
       // Format timestamps for display
@@ -469,4 +471,4 @@ class CheckpointManager {
   }
 }
 
-module.exports = CheckpointManager;
+export default CheckpointManager;

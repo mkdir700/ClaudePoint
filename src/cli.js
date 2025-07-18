@@ -3,12 +3,12 @@
  * Command line interface for checkpoint management
  */
 
-const { program } = require('commander');
-const CheckpointManager = require('./lib/checkpoint-manager');
-const chalk = require('chalk');
-const ora = require('ora');
-const inquirer = require('inquirer');
-const { initializeSlashCommands } = require('./lib/slash-commands');
+import { program } from 'commander';
+import CheckpointManager from './lib/checkpoint-manager.js';
+import chalk from 'chalk';
+import ora from 'ora';
+import inquirer from 'inquirer';
+import { initializeSlashCommands } from './lib/slash-commands.js';
 
 program
   .name('claudepoint')

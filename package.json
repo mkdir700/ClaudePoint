@@ -6,6 +6,7 @@
   "bin": {
     "claudepoint": "./bin/claudepoint.js"
   },
+  "type": "module",
   "preferGlobal": true,
   "scripts": {
     "start": "node src/index.js",

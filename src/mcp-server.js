@@ -7,14 +7,14 @@
  * GitHub: https://github.com/Andycufari/ClaudePoint
  */
 
-const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
-const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
-const { 
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { 
   CallToolRequestSchema, 
   ListToolsRequestSchema 
-} = require('@modelcontextprotocol/sdk/types.js');
-const CheckpointManager = require('./lib/checkpoint-manager.js');
-const { initializeSlashCommands } = require('./lib/slash-commands.js');
+} from '@modelcontextprotocol/sdk/types.js';
+import CheckpointManager from './lib/checkpoint-manager.js';
+import { initializeSlashCommands } from './lib/slash-commands.js';
 
 class ClaudePointMCPServer {
   constructor() {
@@ -554,4 +554,4 @@ server.start().catch(error => {
   process.exit(1);
 });
 
-module.exports = ClaudePointMCPServer;
+export default ClaudePointMCPServer;
