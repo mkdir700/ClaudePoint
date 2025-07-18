@@ -14,13 +14,14 @@ const {
   ListToolsRequestSchema 
 } = require('@modelcontextprotocol/sdk/types.js');
 const CheckpointManager = require('./lib/checkpoint-manager.js');
+const { initializeSlashCommands } = require('./lib/slash-commands.js');
 
 class ClaudePointMCPServer {
   constructor() {
     this.server = new Server(
       {
         name: 'claudepoint',
-        version: '1.1.1',
+        version: '1.1.2',
       },
       {
         capabilities: {
@@ -120,6 +121,14 @@ class ClaudePointMCPServer {
               },
               required: ['description']
             }
+          },
+          {
+            name: 'init_slash_commands',
+            description: 'Initialize Claude Code slash commands for ClaudePoint (creates /create-checkpoint, /restore-checkpoint, /list-checkpoints, /checkpoint-status)',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
           }
         ]
       };
@@ -148,6 +157,9 @@ class ClaudePointMCPServer {
           
           case 'set_changelog':
             return await this.handleSetChangelog(args);
+          
+          case 'init_slash_commands':
+            return await this.handleInitSlashCommands(args);
           
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -428,6 +440,54 @@ class ClaudePointMCPServer {
     }
   }
 
+  async handleInitSlashCommands(args) {
+    try {
+      const result = await initializeSlashCommands();
+      
+      if (result.success) {
+        let output = '🚀 ClaudePoint slash commands initialized!\n\n';
+        output += '✅ Created .claude/commands directory\n';
+        output += '✅ Added /create-checkpoint command\n';
+        output += '✅ Added /restore-checkpoint command\n';
+        output += '✅ Added /list-checkpoints command\n';
+        output += '✅ Added /checkpoint-status command\n';
+        output += '\n💡 Available slash commands:\n';
+        output += '  • /create-checkpoint - Create a new checkpoint\n';
+        output += '  • /restore-checkpoint - Restore with interactive selection\n';
+        output += '  • /list-checkpoints - List all checkpoints\n';
+        output += '  • /checkpoint-status - Show current status\n';
+        output += '\n🎯 Type / in Claude Code to see and use these commands!';
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: output
+            }
+          ]
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `❌ Failed to initialize slash commands: ${result.error}`
+            }
+          ]
+        };
+      }
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `❌ Error initializing slash commands: ${error.message}`
+          }
+        ]
+      };
+    }
+  }
+
   async handleSetup(args) {
     try {
       const result = await this.manager.setup();
@@ -483,7 +543,7 @@ class ClaudePointMCPServer {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error('ClaudePoint MCP server running on stdio');
-    console.error('Available tools: setup_claudepoint, create_checkpoint, list_checkpoints, restore_checkpoint, get_changelog, set_changelog');
+    console.error('Available tools: setup_claudepoint, create_checkpoint, list_checkpoints, restore_checkpoint, get_changelog, set_changelog, init_slash_commands');
   }
 }
 
