@@ -7,7 +7,11 @@
 
 // Check if this is running as an MCP server
 // MCP servers communicate via stdin/stdout, so we check for TTY
-const isMCPServer = !process.stdin.isTTY && !process.stdout.isTTY;
+// CLI mode: both stdin and stdout are TTY
+// MCP mode: neither stdin nor stdout are TTY (pipes)
+// Also check for CLI arguments to force CLI mode
+const hasCliArgs = process.argv.length > 2;
+const isMCPServer = !process.stdin.isTTY && !process.stdout.isTTY && !hasCliArgs;
 
 // Debug info for troubleshooting
 if (process.env.DEBUG) {
