@@ -31,7 +31,12 @@ class ClaudePointMCPServer {
         }
       );
 
-      this.manager = new CheckpointManager();
+      // Use environment variable, home directory, or current directory (in that order)
+      const workingDir = process.env.CLAUDEPOINT_PROJECT_DIR || 
+                      process.env.HOME || 
+                      process.cwd();
+      console.error(`[claudepoint] Using working directory: ${workingDir}`);
+      this.manager = new CheckpointManager(workingDir);
       this.setupToolHandlers();
     } catch (error) {
       console.error('Failed to initialize ClaudePoint MCP server:', error);
