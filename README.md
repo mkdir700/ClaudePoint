@@ -52,6 +52,8 @@ Add to your Claude Desktop configuration file:
 }
 ```
 
+> **Note:** This basic configuration works for most users. Only configure the environment variable below if you need multi-project support or are experiencing working directory issues.
+
 ### 3. Let Claude manage checkpoints
 
 **In any Claude Code or Claude Desktop conversation:**
@@ -400,6 +402,47 @@ claude mcp add claudepoint claudepoint
 2. Restart Claude Desktop completely
 3. Check that `claudepoint` command works in terminal
 4. Ensure Node.js is in system PATH
+
+#### Working Directory Issues (macOS)
+If ClaudePoint tries to create checkpoints in the wrong directory (like root `/`), add the `CLAUDEPOINT_PROJECT_DIR` environment variable:
+
+```json
+{
+  "mcpServers": {
+    "claudepoint": {
+      "command": "claudepoint",
+      "args": [],
+      "env": {
+        "CLAUDEPOINT_PROJECT_DIR": "/Users/username/your-project"
+      }
+    }
+  }
+}
+```
+
+#### Multi-Project Setup
+To manage multiple projects simultaneously, create separate MCP server entries:
+
+```json
+{
+  "mcpServers": {
+    "claudepoint-web": {
+      "command": "claudepoint",
+      "args": [],
+      "env": {
+        "CLAUDEPOINT_PROJECT_DIR": "/Users/username/web-project"
+      }
+    },
+    "claudepoint-api": {
+      "command": "claudepoint",
+      "args": [],
+      "env": {
+        "CLAUDEPOINT_PROJECT_DIR": "/Users/username/api-project"
+      }
+    }
+  }
+}
+```
 
 ### "No files found to checkpoint"
 1. Run `claudepoint setup` first
