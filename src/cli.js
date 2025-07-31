@@ -13,7 +13,7 @@ import { initializeSlashCommands } from './lib/slash-commands.js';
 program
   .name('claudepoint')
   .description('The safest way to experiment with Claude Code')
-  .version('1.1.2');
+  .version('1.2.0');
 
 program
   .command('setup')

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import tar from 'tar';
+import ignore from 'ignore';
 
 const { promises: fsPromises } = fs;
 
@@ -29,6 +30,7 @@ class CheckpointManager {
         '.next', '.nuxt', '.cache', 'tmp', 'temp'
       ],
       additionalIgnores: [],
+      forceInclude: [],
       nameTemplate: 'checkpoint_{timestamp}'
     };
 
@@ -48,36 +50,41 @@ class CheckpointManager {
   async shouldIgnore(filePath) {
     const relativePath = path.relative(this.projectRoot, filePath);
     const config = await this.loadConfig();
+    const ig = ignore();
     
-    // Check gitignore if it exists
+    // Use user-defined ignores if provided, otherwise use defaults + additional
+    let ignorePatterns;
+    if (config.ignores && Array.isArray(config.ignores)) {
+      ignorePatterns = config.ignores; // Complete override
+    } else {
+      ignorePatterns = [...config.ignorePatterns, ...config.additionalIgnores];
+    }
+    
+    // Add ignore patterns
+    ig.add(ignorePatterns);
+    
+    // Add .gitignore patterns if file exists
     try {
       const gitignorePath = path.join(this.projectRoot, '.gitignore');
       const gitignoreContent = await fsPromises.readFile(gitignorePath, 'utf8');
-      const gitignorePatterns = gitignoreContent
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line && !line.startsWith('#'));
-
-      for (const pattern of gitignorePatterns) {
-        if (this.matchesPattern(relativePath, pattern) || 
-            this.matchesPattern(path.basename(filePath), pattern)) {
-          return true;
-        }
-      }
+      ig.add(gitignoreContent);
     } catch (error) {
       // No gitignore file, continue
     }
-
-    // Check configured ignore patterns
-    const allPatterns = [...config.ignorePatterns, ...config.additionalIgnores];
-    for (const pattern of allPatterns) {
-      if (this.matchesPattern(relativePath, pattern) || 
-          this.matchesPattern(path.basename(filePath), pattern)) {
-        return true;
+    
+    // Check if file should be ignored
+    const shouldIgnore = ig.ignores(relativePath);
+    
+    // Check forceInclude patterns (these override ignores)
+    if (shouldIgnore && config.forceInclude && Array.isArray(config.forceInclude)) {
+      const forceIg = ignore();
+      forceIg.add(config.forceInclude);
+      if (forceIg.ignores(relativePath)) {
+        return false; // Force include this file
       }
     }
-
-    return false;
+    
+    return shouldIgnore;
   }
 
   matchesPattern(str, pattern) {

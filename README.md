@@ -461,6 +461,27 @@ npm config get prefix
 npx claudepoint setup
 ```
 
+### Windows-Specific MCP Issues
+
+If you're experiencing MCP server issues on Windows (e.g., "bash not found" errors):
+
+```cmd
+# Test with debug output to diagnose the issue
+set DEBUG=1 && claudepoint setup
+
+# Verify Node.js is properly installed and accessible
+node --version
+where node
+
+# Try using Command Prompt instead of Git Bash/PowerShell
+# The MCP server works best in standard Windows Command Prompt
+```
+
+**Alternative Windows execution methods:**
+- Use `claudepoint.cmd` wrapper if Node.js path issues occur
+- Use `claudepoint.ps1` for PowerShell environments
+- Ensure Node.js is in your Windows PATH environment variable
+
 ## 🎉 Pro Tips
 
 ### 1. **Always setup first**

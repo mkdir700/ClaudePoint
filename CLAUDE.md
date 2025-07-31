@@ -30,6 +30,28 @@ npm run start                  # Run the application
 npm run dev                    # Development mode (same as start)
 ```
 
+### Windows-Specific Setup
+For Windows users experiencing MCP server issues:
+
+1. **Using Command Prompt or PowerShell (Recommended)**:
+   ```cmd
+   npm install -g claudepoint
+   ```
+
+2. **Alternative Windows wrappers** (if Node.js path issues occur):
+   - Use `bin/claudepoint.cmd` for Command Prompt
+   - Use `bin/claudepoint.ps1` for PowerShell
+
+3. **Troubleshooting Windows MCP Issues**:
+   ```cmd
+   # Test with debug output
+   set DEBUG=1 && claudepoint setup
+   
+   # Check Node.js installation
+   node --version
+   npm --version
+   ```
+
 ### Testing
 ```bash
 npm test                       # Currently returns error - no tests configured
