@@ -127,7 +127,33 @@ claudepoint hooks configure                     # Interactive configuration wiza
 npm install -g claudepoint
 ```
 
-### 2. Configure Claude Code or Claude Desktop
+### 2. Initialize your project (ESSENTIAL FIRST STEP!)
+
+```bash
+# In your project directory - run this FIRST!
+claudepoint setup
+```
+
+> **🚨 IMPORTANT**: Always run `claudepoint setup` as your first step in any new project to enable all ClaudePoint features including hooks and incremental checkpoints.
+
+The **interactive setup wizard** will configure everything you need:
+- ✅ Add .checkpoints to .gitignore? (Yes/No)
+- ✅ Create initial checkpoint? (Yes/No) 
+- ✅ Install Claude Code slash commands? (Yes/No)
+- ✅ **Enable automatic safety hooks?** (Yes/No) ⭐ NEW!
+  - Choose which triggers to enable (bash, file operations, etc.)
+  - Configure auto-changelog for development history
+- ✅ **Configure incremental checkpoints** (enabled by default) ⭐ NEW!
+
+**What setup creates:**
+- `.checkpoints/` directory with configuration
+- Initial full checkpoint of your project
+- Hook integration with Claude Code (if selected)
+- Slash commands for faster workflow
+
+For non-interactive setup: `claudepoint setup --no-interactive`
+
+### 3. Configure Claude Code or Claude Desktop (Optional but Recommended)
 
 #### For Claude Code (Command Line):
 ```bash
@@ -152,32 +178,6 @@ Add to your Claude Desktop configuration file:
 ```
 
 > **Note:** This basic configuration works for most users. Only configure the environment variable below if you need multi-project support or are experiencing working directory issues.
-
-### 3. Initialize your project (ESSENTIAL FIRST STEP!)
-
-```bash
-# In your project directory - run this FIRST after npm install!
-claudepoint setup
-```
-
-> **🚨 IMPORTANT**: Always run `claudepoint setup` as your first step in any new project to enable all ClaudePoint features including hooks and incremental checkpoints.
-
-The **interactive setup wizard** will configure everything you need:
-- ✅ Add .checkpoints to .gitignore? (Yes/No)
-- ✅ Create initial checkpoint? (Yes/No) 
-- ✅ Install Claude Code slash commands? (Yes/No)
-- ✅ **Enable automatic safety hooks?** (Yes/No) ⭐ NEW!
-  - Choose which triggers to enable (bash, file operations, etc.)
-  - Configure auto-changelog for development history
-- ✅ **Configure incremental checkpoints** (enabled by default) ⭐ NEW!
-
-**What setup creates:**
-- `.checkpoints/` directory with configuration
-- Initial full checkpoint of your project
-- Hook integration with Claude Code (if selected)
-- Slash commands for faster workflow
-
-For non-interactive setup: `claudepoint setup --no-interactive`
 
 ### 4. Let Claude manage checkpoints
 
