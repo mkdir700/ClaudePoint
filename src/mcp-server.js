@@ -15,6 +15,10 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import CheckpointManager from './lib/checkpoint-manager.js';
 import { initializeSlashCommands } from './lib/slash-commands.js';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const packageJson = require('../package.json');
 
 class ClaudePointMCPServer {
   constructor() {
@@ -22,7 +26,7 @@ class ClaudePointMCPServer {
       this.server = new Server(
         {
           name: 'claudepoint',
-          version: '1.3.1',
+          version: packageJson.version,
         },
         {
           capabilities: {

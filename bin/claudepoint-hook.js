@@ -15,14 +15,17 @@ import { dirname, join } from 'path';
 import { promises as fsPromises } from 'fs';
 import CheckpointManager from '../src/lib/checkpoint-manager.js';
 import { program } from 'commander';
+import { createRequire } from 'module';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const require = createRequire(import.meta.url);
+const packageJson = require('../package.json');
 
 program
   .name('claudepoint-hook')
   .description('ClaudePoint hook integration for Claude Code')
-  .version('1.3.1');
+  .version(packageJson.version);
 
 program
   .option('--trigger <type>', 'Hook trigger type')

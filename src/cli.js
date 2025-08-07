@@ -12,13 +12,16 @@ import { initializeSlashCommands } from './lib/slash-commands.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { createRequire } from 'module';
 
 const { promises: fsPromises } = fs;
+const require = createRequire(import.meta.url);
+const packageJson = require('../package.json');
 
 program
   .name('claudepoint')
   .description('The safest way to experiment with Claude Code')
-  .version('1.3.1');
+  .version(packageJson.version);
 
 program
   .command('setup')
