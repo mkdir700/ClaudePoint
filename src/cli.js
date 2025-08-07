@@ -136,14 +136,17 @@ program
             await hooksManager.saveHooksConfig(hooksConfigData);
             
             // Install to Claude Code settings
+            spinner.text = 'Installing hooks to Claude Code settings...';
             const { execSync } = await import('child_process');
             try {
-              execSync('claudepoint init-hooks --install', { stdio: 'pipe' });
-              spinner.succeed('Hooks configured and installed!');
+              execSync('claudepoint init-hooks --install', { stdio: 'inherit' });
+              spinner.succeed('Hooks configured and installed to Claude Code!');
               console.log(chalk.green('✅ Enabled triggers: ' + hooksConfig.triggers.join(', ')));
+              console.log(chalk.blue('🔄 Remember to restart Claude Code to activate hooks'));
             } catch (error) {
-              spinner.succeed('Hooks configured!');
-              console.log(chalk.yellow('⚠️  Run "claudepoint init-hooks --install" to activate hooks in Claude Code'));
+              spinner.succeed('Hooks configured locally!');
+              console.log(chalk.yellow('⚠️  Failed to auto-install to Claude Code'));
+              console.log(chalk.yellow('   Run manually: claudepoint init-hooks --install'));
             }
           }
           
@@ -153,12 +156,13 @@ program
           console.log(`  🔧 Gitignore: ${updateGitignore ? chalk.green('Updated') : chalk.gray('Skipped')}`);
           console.log(`  📸 Initial checkpoint: ${createInitial && result.initialCheckpoint ? chalk.green('Created') : chalk.gray('Skipped')}`);
           console.log(`  📝 Slash commands: ${installCommands ? chalk.green('Installed') : chalk.gray('Skipped')}`);
-          console.log(`  🪝 Hooks: ${installHooks ? chalk.green('Configured') : chalk.gray('Skipped')}`);
+          console.log(`  🪝 Hooks: ${installHooks ? chalk.green('Configured & Installed to Claude Code') : chalk.gray('Skipped')}`);
           
           console.log(chalk.yellow('\n💡 Next steps:'));
-          console.log('  1. Start using ClaudePoint with Claude Code');
-          console.log('  2. Create checkpoints before major changes');
-          console.log('  3. Use "claudepoint --help" to see all commands');
+          console.log('  1. Restart Claude Code to activate hooks (if installed)');
+          console.log('  2. Start using ClaudePoint with Claude Code');
+          console.log('  3. Create checkpoints before major changes');
+          console.log('  4. Use "claudepoint --help" to see all commands');
         } else {
           spinner.fail(`Setup failed: ${result.error}`);
           process.exit(1);
