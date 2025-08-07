@@ -19,6 +19,105 @@
 - 🛡️ **Safe restoration** - Auto-backup before every restore
 - 🧹 **Auto cleanup** - Configurable checkpoint limits
 - ⚡ **Fast operations** - Optimized for development workflows
+- 🪝 **Claude Code Hooks** - Automatic safety checkpoints before major operations
+- 💾 **Incremental Checkpoints** - Smart storage that saves only file changes
+
+## 💾 Incremental Checkpoints (NEW!)
+
+ClaudePoint now uses **incremental checkpoints by default**, dramatically reducing storage usage while maintaining full restoration capabilities.
+
+### How It Works
+- **First checkpoint**: Always creates a full snapshot
+- **Subsequent checkpoints**: Only store changed files (added/modified/deleted)
+- **Automatic detection**: ClaudePoint decides when to create full vs incremental checkpoints
+- **Chain reconstruction**: Seamlessly rebuilds your project state from checkpoint chains
+
+### Storage Savings
+```
+Traditional (Full) Checkpoints:
+- Every checkpoint: 10MB project = 10MB storage
+- 10 checkpoints = 100MB storage ❌
+
+Incremental Checkpoints:
+- First checkpoint: 10MB (full)
+- Next 9 checkpoints: ~100KB each (only changes)
+- 10 checkpoints = ~11MB storage ✅ (89% savings!)
+```
+
+### Visual Checkpoint Chain
+```bash
+claudepoint list --show-chain
+```
+```
+📋 Available checkpoints (4):
+  └─ 1. feature_complete_2025-01-15 [INC]
+  └─    Feature implementation complete
+  └─    1/15/2025 | 156 files | 2.1MB | 3 changes
+  └─    ↳ based on: refactor_auth_2025-01-15
+
+  ├─ 2. refactor_auth_2025-01-15 [INC]
+  ├─    Refactored authentication
+  ├─    1/15/2025 | 155 files | 2.1MB | 12 changes
+  ├─    ↳ based on: initial_setup_2025-01-15
+
+  3. initial_setup_2025-01-15 [FULL]
+     Initial project setup
+     1/15/2025 | 150 files | 2.0MB
+```
+
+### CLI Options
+```bash
+# Force a full checkpoint (useful for major milestones)
+claudepoint create --full --description "Version 1.0 release"
+
+# Normal usage (automatic incremental)
+claudepoint create --description "Fixed login bug"
+
+# View checkpoint relationships
+claudepoint list --show-chain
+```
+
+### Configuration
+Incremental checkpoints are enabled by default. You can customize in `.checkpoints/config.json`:
+```json
+{
+  "incremental": {
+    "enabled": true,                    // Enable/disable incremental mode
+    "fullSnapshotInterval": 5,          // Create full snapshot every N checkpoints
+    "maxChainLength": 20                // Maximum chain before forcing full snapshot
+  }
+}
+```
+
+## 🪝 Automatic Safety with Hooks (NEW!)
+
+ClaudePoint integrates with Claude Code hooks to automatically create safety checkpoints before potentially destructive operations:
+
+### Quick Setup
+```bash
+# Initialize hooks (creates local config + installs to Claude Code)
+claudepoint init-hooks --install
+
+# Check status and manage triggers
+claudepoint hooks status
+claudepoint hooks configure  # Interactive wizard
+```
+
+### Available Triggers
+- **`before_bulk_edit`** - Safety checkpoint before MultiEdit operations (enabled by default)
+- **`before_major_write`** - Safety checkpoint before Write operations (disabled by default)
+- **`before_bash_commands`** - Safety checkpoint before Bash commands (disabled by default)
+- **`before_file_operations`** - Safety checkpoint before any file changes (disabled by default)
+
+### Management Commands
+```bash
+claudepoint hooks status                    # Show configuration and installation status
+claudepoint hooks enable before_bash_commands   # Enable specific trigger
+claudepoint hooks set-changelog true            # Enable automatic changelog entries
+claudepoint hooks configure                     # Interactive configuration wizard
+```
+
+**Benefits**: Automatic safety without disrupting your workflow - hooks create checkpoints invisibly in the background before major changes!
 
 ## 🚀 Quick Start
 
@@ -54,16 +153,41 @@ Add to your Claude Desktop configuration file:
 
 > **Note:** This basic configuration works for most users. Only configure the environment variable below if you need multi-project support or are experiencing working directory issues.
 
-### 3. Let Claude manage checkpoints
+### 3. Initialize your project (ESSENTIAL FIRST STEP!)
+
+```bash
+# In your project directory - run this FIRST after npm install!
+claudepoint setup
+```
+
+> **🚨 IMPORTANT**: Always run `claudepoint setup` as your first step in any new project to enable all ClaudePoint features including hooks and incremental checkpoints.
+
+The **interactive setup wizard** will configure everything you need:
+- ✅ Add .checkpoints to .gitignore? (Yes/No)
+- ✅ Create initial checkpoint? (Yes/No) 
+- ✅ Install Claude Code slash commands? (Yes/No)
+- ✅ **Enable automatic safety hooks?** (Yes/No) ⭐ NEW!
+  - Choose which triggers to enable (bash, file operations, etc.)
+  - Configure auto-changelog for development history
+- ✅ **Configure incremental checkpoints** (enabled by default) ⭐ NEW!
+
+**What setup creates:**
+- `.checkpoints/` directory with configuration
+- Initial full checkpoint of your project
+- Hook integration with Claude Code (if selected)
+- Slash commands for faster workflow
+
+For non-interactive setup: `claudepoint setup --no-interactive`
+
+### 4. Let Claude manage checkpoints
 
 **In any Claude Code or Claude Desktop conversation:**
 
-- "Setup checkpoints for this project"
 - "Create a checkpoint before refactoring"
-- "Show me our development history from previous sessions"
+- "Show me our development history"
 - "List all my checkpoints"
 - "Restore the checkpoint from before the auth changes"
-- "Log that you just refactored the authentication system"
+- "Log what you just changed"
 
 Claude will automatically use ClaudePoint tools!
 
@@ -228,82 +352,21 @@ Claude:
 3. Uses set_changelog → Documents "Refactored authentication to use OAuth"
 ```
 
-## 🎯 Complete Development Workflow
 
-### 1. Project Setup & Context
-```
-You: "Setup checkpoints and show me our development history"
-Claude: Uses setup_claudepoint + get_changelog → Full project context
-```
+## 🛡️ Safety & Storage
 
-### 2. Before Major Changes
-```
-You: "Create a checkpoint before refactoring the auth system"
-Claude: Uses create_checkpoint → Saves current state + logs activity
-```
+### What Gets Saved
+- ✅ Respects .gitignore patterns
+- ✅ Smart compression with tar.gz
+- ✅ Incremental storage (only changes)
+- ✅ Development history & metadata
+- ✅ Auto-cleanup of old checkpoints
 
-### 3. Making Changes with Documentation
-```
-You: "Refactor authentication to use OAuth and document the changes"
-Claude: 
-- Makes the changes
-- Uses set_changelog → Logs "Refactored authentication system to use OAuth"
-```
-
-### 4. If Issues Arise
-```
-You: "This isn't working, go back to the previous version"
-Claude: Uses restore_checkpoint → Emergency backup + restore + logs activity
-```
-
-### 5. Next Session
-```
-You: "What were we working on last time?"
-Claude: Uses get_changelog → Shows recent development history with detailed context
-```
-
-### 6. Continuing Work
-```
-You: "Continue where we left off with the authentication refactor"
-Claude: Understands context from changelog and continues appropriately
-```
-
-## 📁 What Gets Saved
-
-ClaudePoint automatically:
-- ✅ **Respects .gitignore** - Won't save node_modules, .env, etc.
-- ✅ **Compresses efficiently** - Uses tar.gz for small storage
-- ✅ **Tracks metadata** - Timestamps, descriptions, file counts
-- ✅ **Logs activities** - Complete development history in changelog.json
-- ✅ **Auto-cleans** - Removes old checkpoints (configurable limit)
-
-## 🛡️ Safety Features
-
-### Emergency Backup
-Every restore creates an emergency backup first:
-```
-📦 Emergency backup: emergency_backup_2025-05-30T15-45-30
-🔄 Restoring: auth_refactor_2025-05-30T14-30-15
-✅ Restore complete!
-```
-
-### Dry Run Mode
-Preview changes safely:
-```
-claudepoint restore "checkpoint-name" --dry-run
-```
-
-### Smart Name Matching
-Use partial names:
-```
-"Restore the auth checkpoint" → Finds "auth_refactor_2025-05-30T14-30-15"
-```
-
-### Complete Session Memory
-Track development across sessions:
-```
-📋 Development History shows exactly what was done when, by whom, and why
-```
+### Safety Features
+- **Emergency Backup**: Auto-backup before every restore
+- **Dry Run Mode**: Preview changes with `--dry-run`
+- **Smart Matching**: Use partial checkpoint names
+- **Session Memory**: Complete development timeline
 
 ## ⚙️ Configuration
 
@@ -324,195 +387,17 @@ Auto-created `.checkpoints/config.json`:
 }
 ```
 
-## 🔧 Installation & Setup
-
-### Prerequisites
-- Node.js 18 or higher
-- NPM (comes with Node.js)
-
-### Global Installation
-```bash
-# Install globally
-npm install -g claudepoint
-
-# Verify installation
-claudepoint --version
-```
-
-### Claude Code Setup
-```bash
-# Add ClaudePoint as MCP server
-claude mcp add claudepoint claudepoint
-
-# Verify configuration
-claude mcp list
-claude mcp get claudepoint
-```
-
-### Claude Desktop Setup
-
-1. **Find your config file:**
-   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-
-2. **Add ClaudePoint configuration:**
-   ```json
-   {
-     "mcpServers": {
-       "claudepoint": {
-         "command": "claudepoint",
-         "args": []
-       }
-     }
-   }
-   ```
-
-3. **Restart Claude Desktop**
-
-### Project Setup
-```bash
-# In any project directory
-cd your-project
-claudepoint setup
-```
 
 ## 🔧 Troubleshooting
 
-### Installation Issues
-```bash
-# Clear npm cache and reinstall
-npm cache clean --force
-npm uninstall -g claudepoint
-npm install -g claudepoint
-```
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed solutions.
 
-### Claude Code MCP Issues
-```bash
-# Check if properly configured
-claude mcp list
-claude mcp get claudepoint
+**Quick fixes:**
+- **Installation issues**: `npm cache clean --force && npm install -g claudepoint`
+- **Command not found**: Check PATH with `npm config get prefix`
+- **Wrong directory**: Set `CLAUDEPOINT_PROJECT_DIR` in config
+- **Windows issues**: Use absolute paths in config
 
-# Remove and re-add if needed
-claude mcp remove claudepoint
-claude mcp add claudepoint claudepoint
-```
-
-### Claude Desktop Issues
-1. Verify config file location and syntax
-2. Restart Claude Desktop completely
-3. Check that `claudepoint` command works in terminal
-4. Ensure Node.js is in system PATH
-
-#### Working Directory Issues (macOS)
-If ClaudePoint tries to create checkpoints in the wrong directory (like root `/`), add the `CLAUDEPOINT_PROJECT_DIR` environment variable:
-
-```json
-{
-  "mcpServers": {
-    "claudepoint": {
-      "command": "claudepoint",
-      "args": [],
-      "env": {
-        "CLAUDEPOINT_PROJECT_DIR": "/Users/username/your-project"
-      }
-    }
-  }
-}
-```
-
-#### Multi-Project Setup
-To manage multiple projects simultaneously, create separate MCP server entries:
-
-```json
-{
-  "mcpServers": {
-    "claudepoint-web": {
-      "command": "claudepoint",
-      "args": [],
-      "env": {
-        "CLAUDEPOINT_PROJECT_DIR": "/Users/username/web-project"
-      }
-    },
-    "claudepoint-api": {
-      "command": "claudepoint",
-      "args": [],
-      "env": {
-        "CLAUDEPOINT_PROJECT_DIR": "/Users/username/api-project"
-      }
-    }
-  }
-}
-```
-
-### "No files found to checkpoint"
-1. Run `claudepoint setup` first
-2. Check if `.gitignore` is too restrictive
-3. Verify you're in a project directory with files
-
-### Command Not Found
-```bash
-# Check global installation
-npm list -g claudepoint
-
-# Check PATH includes npm global bin
-npm config get prefix
-
-# If needed, add to PATH or use npx
-npx claudepoint setup
-```
-
-### Windows-Specific MCP Issues
-
-If you're experiencing MCP server issues on Windows (e.g., "bash not found" errors):
-
-```cmd
-# Test with debug output to diagnose the issue
-set DEBUG=1 && claudepoint setup
-
-# Verify Node.js is properly installed and accessible
-node --version
-where node
-
-# Try using Command Prompt instead of Git Bash/PowerShell
-# The MCP server works best in standard Windows Command Prompt
-```
-
-**Alternative Windows execution methods:**
-- Use `claudepoint.cmd` wrapper if Node.js path issues occur
-- Use `claudepoint.ps1` for PowerShell environments
-- Ensure Node.js is in your Windows PATH environment variable
-
-## 🎉 Pro Tips
-
-### 1. **Always setup first**
-```bash
-claudepoint setup
-```
-
-### 2. **Use descriptive checkpoints**
-```
-"Create a checkpoint called 'working-auth' - the OAuth integration is perfect here"
-```
-
-### 3. **Document your work**
-```
-"Log that you just optimized the database queries and improved response times by 40%"
-```
-
-### 4. **Check session history**
-```
-"Show me what we worked on in our last few sessions"
-```
-
-### 5. **Use dry-run for safety**
-```bash
-claudepoint restore "some-checkpoint" --dry-run
-```
-
-### 6. **Combine with Git perfectly**
-- **ClaudePoint**: Rapid experimentation within sessions
-- **Git**: Permanent version control across sessions
-- **Perfect workflow**: Checkpoint → Experiment → Commit successful changes
 
 ## 📊 Why ClaudePoint?
 
@@ -527,15 +412,16 @@ claudepoint restore "some-checkpoint" --dry-run
 | **Space Efficient** | ✅ Compressed | ✅ | ❌ |
 | **Development Timeline** | ✅ Rich History | ❌ Basic | ❌ |
 
+
+## 📚 Documentation
+
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Detailed troubleshooting guide
+- [ADVANCED.md](ADVANCED.md) - Advanced usage, patterns, and configuration
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
+
 ## 🤝 Contributing
 
-Want to improve ClaudePoint?
-
-1. Fork: `https://github.com/Andycufari/ClaudePoint`
-2. Feature branch: `git checkout -b feature/amazing-feature`
-3. Commit: `git commit -m 'Add amazing feature'`
-4. Push: `git push origin feature/amazing-feature`
-5. Pull Request
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## 🐛 Issues & Support
 
@@ -555,4 +441,4 @@ MIT License - Use it however you want!
 
 **Made with ❤️ for the Claude Code community**
 
-Follow [@Andycufari](https://github.com/Andycufari) for more dev tools!
+Follow [@Andycufari](https://x.com/andycufari) for more dev tools!

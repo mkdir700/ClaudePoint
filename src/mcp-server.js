@@ -22,7 +22,7 @@ class ClaudePointMCPServer {
       this.server = new Server(
         {
           name: 'claudepoint',
-          version: '1.2.0',
+          version: '1.3.1',
         },
         {
           capabilities: {
