@@ -3,17 +3,54 @@ import path from 'path';
 import tar from 'tar';
 import ignore from 'ignore';
 import crypto from 'crypto';
+import os from 'os';
 
 const { promises: fsPromises } = fs;
 
 class CheckpointManager {
   constructor(projectRoot = process.cwd()) {
     this.projectRoot = path.resolve(projectRoot);
-    this.checkpointDir = path.join(this.projectRoot, '.checkpoints');
+    this.checkpointDir = path.join(this.projectRoot, '.claudepoint');
     this.snapshotsDir = path.join(this.checkpointDir, 'snapshots');
     this.configFile = path.join(this.checkpointDir, 'config.json');
     this.changelogFile = path.join(this.checkpointDir, 'changelog.json');
     this.hooksConfigFile = path.join(this.checkpointDir, 'hooks.json');
+    
+    // 🕶️ Hacker vibes - cool messages for the coding experience
+    this.successMessages = [
+      '🚀 CLAUDEPOINT LOCKED IN // Ready to hack the impossible',
+      '⚡ CODE VAULT SAVED // Your digital DNA is preserved',
+      '🔥 CHECKPOINT DEPLOYED // Time to break things beautifully',
+      '🎯 REALITY SNAPSHOT CAPTURED // Claude + Human = Unstoppable',
+      '💾 DATA FORTRESS SECURED // Your coding session is immortalized',
+      '🌟 QUANTUM STATE LOCKED // Ready for interdimensional debugging'
+    ];
+    
+    this.undoMessages = [
+      '🔄 INITIATING TIME HACK // Rolling back through digital history',
+      '⏪ REALITY GLITCH DETECTED // Reverting to last stable dimension',
+      '🎭 PLOT ARMOR ACTIVATED // Back to your legendary savepoint',
+      '🚨 EMERGENCY ROLLBACK // Houston, we\'re going back in time',
+      '✨ CTRL+Z OVERDRIVE // Undoing like a digital wizard'
+    ];
+    
+    this.listMessages = [
+      '📡 ACCESSING CODE VAULT // Your collection of digital artifacts',
+      '🗂️ BROWSING CHECKPOINT ARCHIVE // Each one a moment of genius',
+      '🎮 LOADING SAVE FILES // Your coding adventure continues',
+      '🔍 SCANNING CLAUDEPOINT DATABASE // Beep boop beep...'
+    ];
+    
+    this.configMessages = [
+      '⚙️ ENTERING CONFIGURATION MODE // Time to tune your hacking rig',
+      '🎛️ ADJUSTING SETTINGS // Making claudepoint work just right',
+      '🔧 SYSTEM OPTIMIZATION // Preparing for maximum code velocity',
+      '🎚️ FINE-TUNING PARAMETERS // Your checkpoint setup, perfected'
+    ];
+  }
+  
+  getRandomMessage(messageArray) {
+    return messageArray[Math.floor(Math.random() * messageArray.length)];
   }
 
   async ensureDirectories() {
@@ -26,7 +63,7 @@ class CheckpointManager {
       maxCheckpoints: 10,
       autoName: true,
       ignorePatterns: [
-        '.git', '.checkpoints', 'node_modules', '.env', '.env.*',
+        '.git', '.claudepoint', 'node_modules', '.env', '.env.*',
         '*.log', '.DS_Store', 'Thumbs.db', '__pycache__', '*.pyc',
         '.vscode', '.idea', 'dist', 'build', 'coverage', '.nyc_output',
         '.next', '.nuxt', '.cache', 'tmp', 'temp'
@@ -34,12 +71,8 @@ class CheckpointManager {
       additionalIgnores: [],
       forceInclude: [],
       nameTemplate: 'checkpoint_{timestamp}',
-      // Incremental checkpoint settings
-      incremental: {
-        enabled: true,
-        fullSnapshotInterval: 5, // Create full snapshot every N incremental checkpoints
-        maxChainLength: 20 // Maximum incremental chain before forcing full snapshot
-      }
+      // Cleanup settings
+      maxAge: 30 // Days to keep checkpoints (0 = no age limit)
     };
 
     try {
@@ -152,9 +185,27 @@ class CheckpointManager {
 
   async getProjectFiles() {
     const files = [];
+    const startTime = Date.now();
+    let dirCount = 0;
+    let fileCount = 0;
+    
+    // Safety check - don't scan home directory
+    if (this.projectRoot === process.env.HOME || this.projectRoot === os.homedir()) {
+      console.error(`[claudepoint] WARNING: Refusing to scan home directory: ${this.projectRoot}`);
+      console.error(`[claudepoint] Use claudepoint in a specific project directory`);
+      return [];
+    }
+    
+    console.error(`[claudepoint] Scanning project files from: ${this.projectRoot}`);
     
     async function walkDir(dir) {
       try {
+        dirCount++;
+        if (dirCount > 1000) {
+          console.error(`[claudepoint] WARNING: Scanned over 1000 directories, stopping`);
+          return;
+        }
+        
         const entries = await fsPromises.readdir(dir, { withFileTypes: true });
         
         for (const entry of entries) {
@@ -177,6 +228,11 @@ class CheckpointManager {
     }
 
     await walkDir.call(this, this.projectRoot);
+    
+    const elapsed = Date.now() - startTime;
+    console.error(`[claudepoint] File scan complete: ${files.length} files in ${elapsed}ms`);
+    console.error(`[claudepoint] Scanned ${dirCount} directories`);
+    
     return files.sort();
   }
 
@@ -248,31 +304,14 @@ class CheckpointManager {
     return changes;
   }
 
+  findBaseFullCheckpoint(checkpoints) {
+    // Find the most recent full checkpoint
+    return checkpoints.find(cp => cp.type === 'FULL');
+  }
+
+  // Always create full checkpoints now - incremental logic removed
   async shouldCreateFullCheckpoint(changes) {
-    const config = await this.loadConfig();
-    
-    if (!config.incremental.enabled) {
-      return true;
-    }
-    
-    const checkpoints = await this.getCheckpoints();
-    const incrementalCheckpoints = checkpoints.filter(cp => 
-      cp.type === 'INCREMENTAL' || cp.type === 'INC'
-    );
-    
-    // Create full checkpoint if:
-    // 1. This is the first checkpoint
-    // 2. We've reached the full snapshot interval
-    // 3. We've reached the max chain length
-    // 4. There are too many changes (more than 50% of files)
-    const shouldCreateFull = (
-      checkpoints.length === 0 ||
-      incrementalCheckpoints.length >= config.incremental.fullSnapshotInterval ||
-      incrementalCheckpoints.length >= config.incremental.maxChainLength ||
-      (changes.added.length + changes.modified.length + changes.deleted.length) > (checkpoints[0]?.fileCount || 0) * 0.5
-    );
-    
-    return shouldCreateFull;
+    return true;
   }
 
   generateCheckpointName(customName, description) {
@@ -302,7 +341,7 @@ class CheckpointManager {
       
       if (updateGitignore) {
         const gitignorePath = path.join(this.projectRoot, '.gitignore');
-        const gitignoreEntry = '.checkpoints/';
+        const gitignoreEntry = '.claudepoint/';
         
         try {
           let gitignoreContent = '';
@@ -333,6 +372,7 @@ class CheckpointManager {
       if (createInitial) {
         const files = await this.getProjectFiles();
         if (files.length > 0) {
+          // Create initial checkpoint (always full now)
           const result = await this.create('initial', 'Initial ClaudePoint setup');
           if (result.success) {
             initialCheckpoint = result.name;
@@ -353,7 +393,7 @@ class CheckpointManager {
     }
   }
 
-  async create(name, description, forceFullCheckpoint = false) {
+  async create(name, description, forceCreate = false) {
     try {
       await this.ensureDirectories();
       const files = await this.getProjectFiles();
@@ -365,17 +405,35 @@ class CheckpointManager {
         };
       }
 
-      // Get the last checkpoint for comparison
+      // Get checkpoints for comparison
       const checkpoints = await this.getCheckpoints();
       const lastCheckpoint = checkpoints.length > 0 ? checkpoints[0] : null;
       
-      // Calculate file changes
+      // Anti-spam protection: prevent multiple checkpoints within 30 seconds
+      // unless explicitly forced or manually created (has custom name)
+      if (!forceCreate && !name && lastCheckpoint) {
+        const lastCheckpointTime = new Date(lastCheckpoint.timestamp);
+        const now = new Date();
+        const timeDiff = (now - lastCheckpointTime) / 1000; // seconds
+        
+        if (timeDiff < 30) {
+          console.error(`[claudepoint] Skipping checkpoint - created too recently (${Math.round(timeDiff)}s ago)`);
+          return {
+            success: false,
+            error: `Checkpoint created too recently (${Math.round(timeDiff)}s ago)`,
+            tooRecent: true
+          };
+        }
+      }
+      
+      // For change detection, compare against the most recent checkpoint
+      // For incremental storage, we'll determine the base checkpoint separately
       const changes = await this.calculateChanges(files, lastCheckpoint?.name);
       
       // Check if there are any actual changes for incremental checkpoints
       const hasChanges = changes.added.length > 0 || changes.modified.length > 0 || changes.deleted.length > 0;
       
-      if (!forceFullCheckpoint && !hasChanges && lastCheckpoint) {
+      if (!forceCreate && !hasChanges && lastCheckpoint) {
         return {
           success: false,
           error: 'No changes detected since last checkpoint',
@@ -383,9 +441,8 @@ class CheckpointManager {
         };
       }
       
-      // Determine checkpoint type
-      const shouldCreateFull = forceFullCheckpoint || await this.shouldCreateFullCheckpoint(changes);
-      const checkpointType = shouldCreateFull ? 'FULL' : 'INCREMENTAL';
+      // Always create full checkpoints now
+      const checkpointType = 'FULL';
       
       const checkpointName = this.generateCheckpointName(name, description);
       const checkpointPath = path.join(this.snapshotsDir, checkpointName);
@@ -417,45 +474,28 @@ class CheckpointManager {
         fileHashes: Object.fromEntries(fileHashes)
       };
 
-      // Add incremental-specific metadata
-      if (checkpointType === 'INCREMENTAL') {
-        manifest.baseCheckpoint = lastCheckpoint?.name;
-        manifest.changes = changes;
-        manifest.statistics = {
-          filesChanged: changes.added.length + changes.modified.length + changes.deleted.length,
-          bytesAdded: 0, // Will be calculated during storage
-          bytesModified: 0,
-          compressionRatio: 0
-        };
-      }
-
       await fsPromises.writeFile(
         path.join(checkpointPath, 'manifest.json'),
         JSON.stringify(manifest, null, 2)
       );
 
-      if (checkpointType === 'FULL') {
-        // Create full tarball (existing behavior)
-        const tarPath = path.join(checkpointPath, 'files.tar.gz');
-        await tar.create(
-          {
-            gzip: true,
-            file: tarPath,
-            cwd: this.projectRoot
-          },
-          files
-        );
-      } else {
-        // Create incremental checkpoint structure
-        await this.createIncrementalCheckpoint(checkpointPath, changes, manifest);
-      }
+      // Always create full tarball
+      const tarPath = path.join(checkpointPath, 'files.tar.gz');
+      await tar.create(
+        {
+          gzip: true,
+          file: tarPath,
+          cwd: this.projectRoot
+        },
+        files
+      );
 
       // Cleanup old checkpoints
       await this.cleanupOldCheckpoints();
       
       // Log to changelog
-      const logMessage = `Created ${checkpointType.toLowerCase()} checkpoint: ${checkpointName}`;
-      await this.logToChangelog('CREATE_CHECKPOINT', logMessage, manifest.description);
+      const logMessage = `Created ${checkpointType.toLowerCase()} claudepoint: ${checkpointName}`;
+      await this.logToChangelog('CREATE_CLAUDEPOINT', logMessage, manifest.description);
       
       return {
         success: true,
@@ -594,7 +634,7 @@ class CheckpointManager {
       await this.cleanupEmptyDirectories();
 
       // Log to changelog
-      await this.logToChangelog('RESTORE_CHECKPOINT', `Restored ${checkpoint.type || 'FULL'} checkpoint: ${checkpoint.name}`, `Emergency backup: ${emergencyName}`);
+      await this.logToChangelog('RESTORE_CLAUDEPOINT', `Restored ${checkpoint.type || 'FULL'} claudepoint: ${checkpoint.name}`, `Emergency backup: ${emergencyName}`);
 
       return {
         success: true,
@@ -767,16 +807,35 @@ class CheckpointManager {
   async cleanupOldCheckpoints() {
     const config = await this.loadConfig();
     const checkpoints = await this.getCheckpoints();
+    const toDelete = [];
     
-    if (checkpoints.length > config.maxCheckpoints) {
-      const toDelete = checkpoints.slice(config.maxCheckpoints);
-      for (const checkpoint of toDelete) {
-        const checkpointPath = path.join(this.snapshotsDir, checkpoint.name);
-        try {
-          await fsPromises.rm(checkpointPath, { recursive: true, force: true });
-        } catch (error) {
-          // Continue on error
+    // Age-based cleanup (if maxAge > 0)
+    if (config.maxAge > 0) {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - config.maxAge);
+      
+      for (const checkpoint of checkpoints) {
+        const checkpointDate = new Date(checkpoint.timestamp);
+        if (checkpointDate < cutoffDate) {
+          toDelete.push(checkpoint);
         }
+      }
+    }
+    
+    // Count-based cleanup (keep only maxCheckpoints newest)
+    const remainingAfterAge = checkpoints.filter(cp => !toDelete.includes(cp));
+    if (remainingAfterAge.length > config.maxCheckpoints) {
+      const excessCheckpoints = remainingAfterAge.slice(config.maxCheckpoints);
+      toDelete.push(...excessCheckpoints);
+    }
+    
+    // Delete old checkpoints
+    for (const checkpoint of toDelete) {
+      const checkpointPath = path.join(this.snapshotsDir, checkpoint.name);
+      try {
+        await fsPromises.rm(checkpointPath, { recursive: true, force: true });
+      } catch (error) {
+        // Continue on error
       }
     }
   }
@@ -866,6 +925,82 @@ class CheckpointManager {
       }));
     } catch (error) {
       return [];
+    }
+  }
+
+  // 🎯 NEW: Get files changed since last claudepoint
+  async getChangedFilesSinceLastClaudepoint() {
+    try {
+      const checkpoints = await this.getCheckpoints();
+      const currentFiles = await this.getProjectFiles();
+      
+      if (checkpoints.length === 0) {
+        return {
+          hasLastClaudepoint: false,
+          added: currentFiles,
+          modified: [],
+          deleted: [],
+          totalChanges: currentFiles.length
+        };
+      }
+      
+      const lastClaudepoint = checkpoints[0];
+      const changes = await this.calculateChanges(currentFiles, lastClaudepoint.name);
+      
+      return {
+        hasLastClaudepoint: true,
+        lastClaudepointName: lastClaudepoint.name,
+        lastClaudepointDate: new Date(lastClaudepoint.timestamp).toLocaleString(),
+        ...changes,
+        totalChanges: changes.added.length + changes.modified.length + changes.deleted.length
+      };
+    } catch (error) {
+      return {
+        error: error.message,
+        hasLastClaudepoint: false,
+        added: [],
+        modified: [],
+        deleted: [],
+        totalChanges: 0
+      };
+    }
+  }
+
+  // 🎮 NEW: Interactive configuration management
+  async getConfigurationStatus() {
+    const config = await this.loadConfig();
+    const checkpoints = await this.getCheckpoints();
+    
+    return {
+      maxClaudepoints: config.maxCheckpoints,
+      maxAge: config.maxAge,
+      currentClaudepoints: checkpoints.length,
+      ignorePatterns: config.ignorePatterns.length + config.additionalIgnores.length,
+      autoName: config.autoName,
+      configPath: this.configFile
+    };
+  }
+
+  // 🚀 NEW: Quick undo - restore last claudepoint
+  async undoLastClaudepoint() {
+    try {
+      const checkpoints = await this.getCheckpoints();
+      
+      if (checkpoints.length === 0) {
+        return {
+          success: false,
+          error: '🤔 No claudepoints found to undo. Create your first safety net!',
+          noClaudepoints: true
+        };
+      }
+      
+      const lastClaudepoint = checkpoints[0];
+      return await this.restore(lastClaudepoint.name, false);
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 }

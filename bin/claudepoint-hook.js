@@ -35,21 +35,34 @@ program
 
 const options = program.opts();
 
+async function logHookAttempt(projectDir, message, isError = false) {
+  try {
+    const logFile = join(projectDir, '.claudepoint', 'hooks.log');
+    const timestamp = new Date().toISOString();
+    const level = isError ? 'ERROR' : 'INFO';
+    const logEntry = `[${timestamp}] ${level}: ${message}\n`;
+    
+    await fsPromises.appendFile(logFile, logEntry);
+  } catch (error) {
+    // Silently fail if logging fails - don't break the hook
+  }
+}
+
 async function findProjectDirectory() {
   // Strategy 1: Use env var if set
   if (process.env.CLAUDEPOINT_PROJECT_DIR) {
     return process.env.CLAUDEPOINT_PROJECT_DIR;
   }
   
-  // Strategy 2: Look for .checkpoints directory starting from cwd
+  // Strategy 2: Look for .claudepoint directory starting from cwd
   let currentDir = process.cwd();
   const root = '/';
   
   while (currentDir !== root) {
-    const checkpointDir = join(currentDir, '.checkpoints');
+    const checkpointDir = join(currentDir, '.claudepoint');
     try {
       await fsPromises.access(checkpointDir);
-      return currentDir; // Found .checkpoints directory
+      return currentDir; // Found .claudepoint directory
     } catch (error) {
       // Continue searching
     }
@@ -67,16 +80,31 @@ async function main() {
     const projectDir = await findProjectDirectory();
     const manager = new CheckpointManager(projectDir);
     
+    await logHookAttempt(projectDir, `Hook triggered: ${options.trigger} for tool ${options.tool}`);
+    
     if (options.debug) {
       console.error(`[claudepoint-hook] Project dir: ${projectDir}`);
       console.error(`[claudepoint-hook] Trigger: ${options.trigger}`);
       console.error(`[claudepoint-hook] Tool: ${options.tool}`);
     }
 
+    // Check if ClaudePoint is set up in this project
+    const checkpointsDir = join(projectDir, '.claudepoint');
+    try {
+      await fsPromises.access(checkpointsDir);
+    } catch (error) {
+      await logHookAttempt(projectDir, 'ClaudePoint not set up in this project, skipping hook');
+      if (options.debug) {
+        console.error('[claudepoint-hook] ClaudePoint not set up in this project, exiting');
+      }
+      return; // Silently exit if ClaudePoint isn't set up
+    }
+
     // Load hooks configuration
     const hooksConfig = await manager.loadHooksConfig();
     
     if (!hooksConfig.enabled) {
+      await logHookAttempt(projectDir, 'Hooks are disabled in this project, skipping');
       if (options.debug) {
         console.error('[claudepoint-hook] Hooks disabled, exiting');
       }
@@ -86,19 +114,19 @@ async function main() {
     // Handle different trigger types
     switch (options.trigger) {
       case 'before_bulk_edit':
-        await handleBeforeBulkEdit(manager, hooksConfig, options);
+        await handleBeforeBulkEdit(manager, hooksConfig, options, projectDir);
         break;
       
       case 'before_major_write':
-        await handleBeforeMajorWrite(manager, hooksConfig, options);
+        await handleBeforeMajorWrite(manager, hooksConfig, options, projectDir);
         break;
       
       case 'before_bash_commands':
-        await handleBeforeBashCommands(manager, hooksConfig, options);
+        await handleBeforeBashCommands(manager, hooksConfig, options, projectDir);
         break;
       
       case 'before_file_operations':
-        await handleBeforeFileOperations(manager, hooksConfig, options);
+        await handleBeforeFileOperations(manager, hooksConfig, options, projectDir);
         break;
       
       default:
@@ -108,6 +136,13 @@ async function main() {
     }
 
   } catch (error) {
+    try {
+      const projectDir = await findProjectDirectory();
+      await logHookAttempt(projectDir, `Hook failed: ${error.message}`, true);
+    } catch (logError) {
+      // Ignore logging errors
+    }
+    
     if (options.debug) {
       console.error('[claudepoint-hook] Error:', error.message);
       console.error('[claudepoint-hook] Stack:', error.stack);
@@ -116,10 +151,11 @@ async function main() {
   }
 }
 
-async function handleBeforeBulkEdit(manager, config, options) {
+async function handleBeforeBulkEdit(manager, config, options, projectDir) {
   const trigger = config.triggers?.before_bulk_edit;
   
   if (!trigger?.enabled) {
+    await logHookAttempt(projectDir, `Trigger before_bulk_edit is disabled, skipping`);
     if (options.debug) {
       console.error('[claudepoint-hook] before_bulk_edit trigger disabled');
     }
@@ -130,10 +166,12 @@ async function handleBeforeBulkEdit(manager, config, options) {
   const description = `Safety checkpoint before ${options.tool || 'bulk edit'}`;
   
   try {
+    await logHookAttempt(projectDir, `Creating safety checkpoint: ${description}`);
     await manager.ensureDirectories();
-    const result = await manager.create(null, description);
+    const result = await manager.create(null, description, false); // Don't force, respect anti-spam
     
     if (result.success) {
+      await logHookAttempt(projectDir, `Successfully created checkpoint: ${result.name}`);
       if (options.debug) {
         console.error(`[claudepoint-hook] Created safety checkpoint: ${result.name}`);
       }
@@ -151,6 +189,12 @@ async function handleBeforeBulkEdit(manager, config, options) {
         console.error(`[claudepoint-hook] No changes detected, skipping checkpoint`);
       }
       // This is not an error - just no changes to checkpoint
+    } else if (result.tooRecent) {
+      await logHookAttempt(projectDir, `Skipping checkpoint - too recent: ${result.error}`);
+      if (options.debug) {
+        console.error(`[claudepoint-hook] ${result.error}`);
+      }
+      // This is not an error - just anti-spam protection
     } else {
       if (options.debug) {
         console.error(`[claudepoint-hook] Failed to create checkpoint: ${result.error}`);
@@ -163,7 +207,7 @@ async function handleBeforeBulkEdit(manager, config, options) {
   }
 }
 
-async function handleBeforeMajorWrite(manager, config, options) {
+async function handleBeforeMajorWrite(manager, config, options, projectDir) {
   const trigger = config.triggers?.before_major_write;
   
   if (!trigger?.enabled) {
@@ -174,7 +218,7 @@ async function handleBeforeMajorWrite(manager, config, options) {
   await handleBeforeBulkEdit(manager, config, options);
 }
 
-async function handleBeforeBashCommands(manager, config, options) {
+async function handleBeforeBashCommands(manager, config, options, projectDir) {
   const trigger = config.triggers?.before_bash_commands;
   
   if (!trigger?.enabled) {
@@ -189,7 +233,7 @@ async function handleBeforeBashCommands(manager, config, options) {
   
   try {
     await manager.ensureDirectories();
-    const result = await manager.create(null, description);
+    const result = await manager.create(null, description, false); // Don't force, respect anti-spam
     
     if (result.success) {
       if (options.debug) {
@@ -216,7 +260,7 @@ async function handleBeforeBashCommands(manager, config, options) {
   }
 }
 
-async function handleBeforeFileOperations(manager, config, options) {
+async function handleBeforeFileOperations(manager, config, options, projectDir) {
   const trigger = config.triggers?.before_file_operations;
   
   if (!trigger?.enabled) {
@@ -231,7 +275,7 @@ async function handleBeforeFileOperations(manager, config, options) {
   
   try {
     await manager.ensureDirectories();
-    const result = await manager.create(null, description);
+    const result = await manager.create(null, description, false); // Don't force, respect anti-spam
     
     if (result.success) {
       if (options.debug) {

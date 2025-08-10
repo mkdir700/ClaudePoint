@@ -35,11 +35,12 @@ class ClaudePointMCPServer {
         }
       );
 
-      // Use environment variable, home directory, or current directory (in that order)
-      const workingDir = process.env.CLAUDEPOINT_PROJECT_DIR || 
-                      process.env.HOME || 
-                      process.cwd();
+      // Get the working directory from MCP environment or current directory
+      // Claude Code sets the cwd to the project directory when launching MCP servers
+      const workingDir = process.cwd();
       console.error(`[claudepoint] Using working directory: ${workingDir}`);
+      console.error(`[claudepoint] Process started from: ${process.cwd()}`);
+      console.error(`[claudepoint] Environment CWD: ${process.env.PWD || 'not set'}`);
       this.manager = new CheckpointManager(workingDir);
       this.setupToolHandlers();
     } catch (error) {
@@ -55,8 +56,8 @@ class ClaudePointMCPServer {
       return {
         tools: [
           {
-            name: 'create_checkpoint',
-            description: 'Create a new checkpoint of the current codebase',
+            name: 'create_claudepoint',
+            description: '💾 Deploy a new claudepoint // Lock in your digital DNA and experiment fearlessly',
             inputSchema: {
               type: 'object',
               properties: {
@@ -72,22 +73,22 @@ class ClaudePointMCPServer {
             }
           },
           {
-            name: 'list_checkpoints',
-            description: 'List all available checkpoints in the current project',
+            name: 'list_claudepoints',
+            description: '🗂️ Browse your claudepoint vault // View your collection of digital artifacts',
             inputSchema: {
               type: 'object',
               properties: {}
             }
           },
           {
-            name: 'restore_checkpoint',
-            description: 'Restore a previous checkpoint (creates emergency backup first)',
+            name: 'restore_claudepoint',
+            description: '🔄 Time travel to a specific claudepoint // Precision restoration with emergency backup',
             inputSchema: {
               type: 'object',
               properties: {
-                checkpoint: {
+                claudepoint: {
                   type: 'string',
-                  description: 'Name or partial name of the checkpoint to restore'
+                  description: 'Name or partial name of the claudepoint to restore'
                 },
                 dry_run: {
                   type: 'boolean',
@@ -95,12 +96,12 @@ class ClaudePointMCPServer {
                   default: false
                 }
               },
-              required: ['checkpoint']
+              required: ['claudepoint']
             }
           },
           {
             name: 'setup_claudepoint',
-            description: 'Setup ClaudePoint in the current project (creates .checkpoints dir, updates .gitignore)',
+            description: '🎆 Initialize ClaudePoint // Creates .claudepoint vault and activates stealth mode',
             inputSchema: {
               type: 'object',
               properties: {}
@@ -108,7 +109,7 @@ class ClaudePointMCPServer {
           },
           {
             name: 'get_changelog',
-            description: 'Get development history and changelog of all checkpoint activities',
+            description: '📡 Access development history // View your coding adventure timeline',
             inputSchema: {
               type: 'object',
               properties: {}
@@ -139,7 +140,31 @@ class ClaudePointMCPServer {
           },
           {
             name: 'init_slash_commands',
-            description: 'Initialize Claude Code slash commands for ClaudePoint (creates /create-checkpoint, /restore-checkpoint, /list-checkpoints, /checkpoint-status)',
+            description: '🚀 Deploy slash command arsenal // Install claudepoint commands in Claude Code',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
+          },
+          {
+            name: 'undo_claudepoint',
+            description: '🔄 Instant time hack // Quick restore to your last claudepoint',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
+          },
+          {
+            name: 'get_changes',
+            description: '🔍 Scan for changes // See what\'s different since your last claudepoint',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
+          },
+          {
+            name: 'configure_claudepoint',
+            description: '⚙️ Enter configuration mode // View and tune your claudepoint settings',
             inputSchema: {
               type: 'object',
               properties: {}
@@ -155,14 +180,23 @@ class ClaudePointMCPServer {
 
       try {
         switch (name) {
-          case 'create_checkpoint':
-            return await this.handleCreateCheckpoint(args);
+          case 'create_claudepoint':
+            return await this.handleCreateClaudepoint(args);
           
-          case 'list_checkpoints':
-            return await this.handleListCheckpoints(args);
+          case 'list_claudepoints':
+            return await this.handleListClaudepoints(args);
           
-          case 'restore_checkpoint':
-            return await this.handleRestoreCheckpoint(args);
+          case 'restore_claudepoint':
+            return await this.handleRestoreClaudepoint(args);
+            
+          case 'undo_claudepoint':
+            return await this.handleUndoClaudepoint(args);
+            
+          case 'get_changes':
+            return await this.handleGetChanges(args);
+            
+          case 'configure_claudepoint':
+            return await this.handleConfigureClaudepoint(args);
           
           case 'setup_claudepoint':
             return await this.handleSetup(args);
@@ -193,19 +227,34 @@ class ClaudePointMCPServer {
     });
   }
 
-  async handleCreateCheckpoint(args) {
+  async handleCreateClaudepoint(args) {
     const { name, description } = args || {};
     
+    console.error(`[claudepoint] Creating claudepoint: name=${name}, desc=${description}`);
+    console.error(`[claudepoint] Working in: ${process.cwd()}`);
+    
     try {
-      await this.manager.ensureDirectories();
-      const files = await this.manager.getProjectFiles();
+      // Add timeout protection
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Operation timed out after 10 seconds')), 10000);
+      });
+      
+      const operationPromise = (async () => {
+        await this.manager.ensureDirectories();
+        console.error(`[claudepoint] Getting project files...`);
+        const files = await this.manager.getProjectFiles();
+        console.error(`[claudepoint] Found ${files.length} files`);
+        return files;
+      })();
+      
+      const files = await Promise.race([operationPromise, timeoutPromise]);
       
       if (files.length === 0) {
         return {
           content: [
             {
               type: 'text',
-              text: '❌ No files found to checkpoint! Make sure you\'re in a project directory and run setup first.'
+              text: '🚨 No files found to deploy! Make sure you\'re in a project directory and run setup first.'
             }
           ]
         };
@@ -214,11 +263,21 @@ class ClaudePointMCPServer {
       const result = await this.manager.create(name, description);
       
       if (result.success) {
+        const successMsg = this.manager.getRandomMessage(this.manager.successMessages);
         return {
           content: [
             {
               type: 'text',
-              text: `✅ Checkpoint created: ${result.name}\n   Files: ${result.fileCount}\n   Size: ${result.size}\n   Description: ${result.description || 'Manual checkpoint'}`
+              text: `${successMsg}\n   💾 Name: ${result.name}\n   📁 Files: ${result.fileCount}\n   📊 Size: ${result.size}\n   📝 Description: ${result.description || 'Manual claudepoint'}`
+            }
+          ]
+        };
+      } else if (result.noChanges) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: '🤔 Codebase is stable // No changes detected since last claudepoint'
             }
           ]
         };
@@ -227,7 +286,7 @@ class ClaudePointMCPServer {
           content: [
             {
               type: 'text',
-              text: `❌ Failed to create checkpoint: ${result.error}`
+              text: `🚨 Deploy failed: ${result.error}`
             }
           ]
         };
@@ -237,7 +296,7 @@ class ClaudePointMCPServer {
         content: [
           {
             type: 'text',
-            text: `❌ Error creating checkpoint: ${error.message}`
+            text: `🚨 Error deploying claudepoint: ${error.message}`
           }
         ]
       };
@@ -331,26 +390,27 @@ class ClaudePointMCPServer {
     }
   }
 
-  async handleListCheckpoints(args) {
+  async handleListClaudepoints(args) {
     try {
-      const checkpoints = await this.manager.getCheckpoints();
+      const claudepoints = await this.manager.getCheckpoints();
       
-      if (checkpoints.length === 0) {
+      if (claudepoints.length === 0) {
         return {
           content: [
             {
               type: 'text',
-              text: '📋 No checkpoints found. Create your first checkpoint with create_checkpoint!'
+              text: '🤔 No claudepoints found in the vault. Deploy your first with create_claudepoint!'
             }
           ]
         };
       }
 
-      let output = `📋 Available checkpoints (${checkpoints.length}):\n\n`;
+      const listMsg = this.manager.getRandomMessage(this.manager.listMessages);
+      let output = `${listMsg}\n📦 Total claudepoints: ${claudepoints.length}\n\n`;
       
-      checkpoints.forEach((cp, index) => {
+      claudepoints.forEach((cp, index) => {
         const date = new Date(cp.timestamp).toLocaleString();
-        output += `${index + 1}. ${cp.name}\n`;
+        output += `${index + 1}. 💾 ${cp.name}\n`;
         output += `   📝 ${cp.description}\n`;
         output += `   📅 ${date} | ${cp.fileCount} files | ${this.manager.formatSize(cp.totalSize)}\n\n`;
       });
@@ -368,20 +428,20 @@ class ClaudePointMCPServer {
         content: [
           {
             type: 'text',
-            text: `❌ Error listing checkpoints: ${error.message}`
+            text: `🚨 Error browsing vault: ${error.message}`
           }
         ]
       };
     }
   }
 
-  async handleRestoreCheckpoint(args) {
-    const { checkpoint, dry_run = false } = args || {};
+  async handleRestoreClaudepoint(args) {
+    const { claudepoint, dry_run = false } = args || {};
     
     try {
       const checkpoints = await this.manager.getCheckpoints();
       const targetCheckpoint = checkpoints.find(cp => 
-        cp.name === checkpoint || cp.name.includes(checkpoint)
+        cp.name === claudepoint || cp.name.includes(claudepoint)
       );
 
       if (!targetCheckpoint) {
@@ -390,7 +450,7 @@ class ClaudePointMCPServer {
           content: [
             {
               type: 'text',
-              text: `❌ Checkpoint not found: ${checkpoint}\n\nAvailable checkpoints:\n${available}`
+              text: `🚨 Claudepoint not found: ${claudepoint}\n\nAvailable claudepoints:\n${available}`
             }
           ]
         };
@@ -409,7 +469,7 @@ class ClaudePointMCPServer {
           output += `   🗑️  Would delete ${filesToDelete.length} files that didn't exist in checkpoint\n`;
         }
         
-        output += '\nUse restore_checkpoint without dry_run to proceed.';
+        output += '\nUse restore_claudepoint without dry_run to proceed.';
         
         return {
           content: [
@@ -422,14 +482,14 @@ class ClaudePointMCPServer {
       }
 
       // Perform actual restore
-      const result = await this.manager.restore(checkpoint, false);
+      const result = await this.manager.restore(claudepoint, false);
       
       if (result.success) {
         return {
           content: [
             {
               type: 'text',
-              text: `✅ Checkpoint restored successfully!\n   📦 Emergency backup created: ${result.emergencyBackup}\n   🔄 Restored: ${targetCheckpoint.name}\n   📁 Files restored: ${targetCheckpoint.fileCount}`
+              text: `${this.manager.getRandomMessage(this.manager.undoMessages)}\n   🔒 Emergency backup: ${result.emergencyBackup}\n   🔄 Restored: ${targetCheckpoint.name}\n   📁 Files restored: ${targetCheckpoint.fileCount}`
             }
           ]
         };
@@ -438,7 +498,7 @@ class ClaudePointMCPServer {
           content: [
             {
               type: 'text',
-              text: `❌ Failed to restore checkpoint: ${result.error}`
+              text: `🚨 Time travel failed: ${result.error}`
             }
           ]
         };
@@ -448,7 +508,7 @@ class ClaudePointMCPServer {
         content: [
           {
             type: 'text',
-            text: `❌ Error restoring checkpoint: ${error.message}`
+            text: `🚨 Time travel error: ${error.message}`
           }
         ]
       };
@@ -462,15 +522,16 @@ class ClaudePointMCPServer {
       if (result.success) {
         let output = '🚀 ClaudePoint slash commands initialized!\n\n';
         output += '✅ Created .claude/commands directory\n';
-        output += '✅ Added /create-checkpoint command\n';
-        output += '✅ Added /restore-checkpoint command\n';
-        output += '✅ Added /list-checkpoints command\n';
-        output += '✅ Added /checkpoint-status command\n';
-        output += '\n💡 Available slash commands:\n';
-        output += '  • /create-checkpoint - Create a new checkpoint\n';
-        output += '  • /restore-checkpoint - Restore with interactive selection\n';
-        output += '  • /list-checkpoints - List all checkpoints\n';
-        output += '  • /checkpoint-status - Show current status\n';
+        output += '✅ Added complete claudepoint command arsenal\n';
+        output += '✅ Created 7 essential slash commands\n';
+        output += '\n💡 Main slash commands:\n';
+        output += '  • /claudepoint - Deploy a new claudepoint\n';
+        output += '  • /undo - Instant time hack to last claudepoint\n';
+        output += '  • /claudepoint-restore - Time travel with interactive selection\n';
+        output += '  • /claudepoint-list - Browse your claudepoint vault\n';
+        output += '  • /changes - Scan for modifications\n';
+        output += '  • /claudepoint-changelog - View history\n';
+        output += '  • /ultrathink - Activate deep reasoning mode\n';
         output += '\n🎯 Type / in Claude Code to see and use these commands!';
         
         return {
@@ -508,21 +569,23 @@ class ClaudePointMCPServer {
       const result = await this.manager.setup();
       
       if (result.success) {
-        let output = '🚀 ClaudePoint setup complete!\n\n';
-        output += '✅ Created .checkpoints directory\n';
-        output += '✅ Updated .gitignore\n';
-        output += '✅ Created configuration\n';
+        let output = '💾 ClaudePoint is ONLINE!\n\n';
+        output += '✨ Created .claudepoint vault\n';
+        output += '🔒 Updated .gitignore (stealth mode activated)\n';
+        output += '⚙️ Configuration loaded\n';
         
         if (result.initialCheckpoint) {
-          output += `✅ Created initial checkpoint: ${result.initialCheckpoint}\n`;
+          output += `✨ Deployed initial claudepoint: ${result.initialCheckpoint}\n`;
         }
         
-        output += '\n📋 Quick commands:\n';
-        output += '  • create_checkpoint - Create a new checkpoint\n';
-        output += '  • list_checkpoints - See all checkpoints\n';
-        output += '  • restore_checkpoint - Restore a previous state\n';
-        output += '  • get_changelog - View development history\n';
-        output += '\n💡 Tip: Always create a checkpoint before major changes!';
+        output += '\n🚀 Quick command arsenal:\n';
+        output += '  • create_claudepoint - Deploy a new claudepoint\n';
+        output += '  • list_claudepoints - Browse your vault\n';
+        output += '  • restore_claudepoint - Time travel to previous state\n';
+        output += '  • undo_claudepoint - Quick time hack to last claudepoint\n';
+        output += '  • get_changes - Scan for code changes\n';
+        output += '  • get_changelog - View your coding adventure timeline\n';
+        output += '\n🎆 Tip: Deploy claudepoints before hacking the impossible!';
         
         return {
           content: [
@@ -537,7 +600,7 @@ class ClaudePointMCPServer {
           content: [
             {
               type: 'text',
-              text: `❌ Setup failed: ${result.error}`
+              text: `🚨 Initialization failed: ${result.error}`
             }
           ]
         };
@@ -547,10 +610,209 @@ class ClaudePointMCPServer {
         content: [
           {
             type: 'text',
-            text: `❌ Error during setup: ${error.message}`
+            text: `🚨 Error during setup: ${error.message}`
             }
           ]
         };
+    }
+  }
+
+  // 🚀 NEW: Quick undo handler
+  async handleUndoClaudepoint(args) {
+    try {
+      const result = await this.manager.undoLastClaudepoint();
+      
+      if (result.success) {
+        const undoMsg = this.manager.getRandomMessage(this.manager.undoMessages);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `${undoMsg}\n   🛡️ Emergency backup: ${result.emergencyBackup}\n   🔄 Restored: ${result.restored}\n   📅 Back to the future!`
+            }
+          ]
+        };
+      } else if (result.noClaudepoints) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: '🤔 No claudepoints found to undo. Deploy your first safety net!'
+            }
+          ]
+        };
+      } else {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `🚨 Time hack failed: ${result.error}`
+            }
+          ]
+        };
+      }
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `🚨 Error during time hack: ${error.message}`
+          }
+        ]
+      };
+    }
+  }
+
+  // 🔍 NEW: Changes handler
+  async handleGetChanges(args) {
+    try {
+      const changes = await this.manager.getChangedFilesSinceLastClaudepoint();
+      
+      if (changes.error) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `🚨 Scan error: ${changes.error}`
+            }
+          ]
+        };
+      }
+      
+      if (!changes.hasLastClaudepoint) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `🆕 No previous claudepoint found // Everything is new!\n📁 Total files in project: ${changes.totalChanges}\n\nDeploy your first claudepoint to start tracking changes.`
+            }
+          ]
+        };
+      }
+      
+      if (changes.totalChanges === 0) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✨ Codebase is stable // No changes detected\n📍 Last claudepoint: ${changes.lastClaudepointName}\n📅 Created: ${changes.lastClaudepointDate}\n\n🎯 Perfect time to experiment - you're fully protected!`
+            }
+          ]
+        };
+      }
+      
+      let output = `🎯 Changes detected: ${changes.totalChanges} modifications found\n`;
+      output += `📍 Since claudepoint: ${changes.lastClaudepointName}\n`;
+      output += `📅 Created: ${changes.lastClaudepointDate}\n\n`;
+      
+      if (changes.added.length > 0) {
+        output += `➕ Added files (${changes.added.length}):\n`;
+        changes.added.slice(0, 5).forEach(file => {
+          output += `   + ${file}\n`;
+        });
+        if (changes.added.length > 5) {
+          output += `   ... and ${changes.added.length - 5} more\n`;
+        }
+        output += '\n';
+      }
+      
+      if (changes.modified.length > 0) {
+        output += `📝 Modified files (${changes.modified.length}):\n`;
+        changes.modified.slice(0, 5).forEach(file => {
+          output += `   ~ ${file}\n`;
+        });
+        if (changes.modified.length > 5) {
+          output += `   ... and ${changes.modified.length - 5} more\n`;
+        }
+        output += '\n';
+      }
+      
+      if (changes.deleted.length > 0) {
+        output += `🗑️ Deleted files (${changes.deleted.length}):\n`;
+        changes.deleted.slice(0, 5).forEach(file => {
+          output += `   - ${file}\n`;
+        });
+        if (changes.deleted.length > 5) {
+          output += `   ... and ${changes.deleted.length - 5} more\n`;
+        }
+        output += '\n';
+      }
+      
+      output += '💡 Ready to lock in these changes? Use create_claudepoint!';
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: output
+          }
+        ]
+      };
+      
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `🚨 Scan error: ${error.message}`
+          }
+        ]
+      };
+    }
+  }
+
+  // ⚙️ NEW: Configuration handler
+  async handleConfigureClaudepoint(args) {
+    try {
+      const status = await this.manager.getConfigurationStatus();
+      const configMsg = this.manager.getRandomMessage(this.manager.configMessages);
+      
+      let output = `${configMsg}\n\n`;
+      output += `🎛️ Current Configuration:\n`;
+      output += `   Max Claudepoints: ${status.maxClaudepoints}\n`;
+      output += `   Current Claudepoints: ${status.currentClaudepoints}\n`;
+      output += `   Max Age: ${status.maxAge} days ${status.maxAge === 0 ? '(unlimited)' : ''}\n`;
+      output += `   Ignore Patterns: ${status.ignorePatterns} rules\n`;
+      output += `   Auto Naming: ${status.autoName ? 'Enabled' : 'Disabled'}\n`;
+      output += `   Config File: ${status.configPath}\n\n`;
+      
+      const config = await this.manager.loadConfig();
+      if (config.additionalIgnores && config.additionalIgnores.length > 0) {
+        output += `🚷 Additional Ignore Patterns:\n`;
+        config.additionalIgnores.forEach(pattern => {
+          output += `   • ${pattern}\n`;
+        });
+        output += '\n';
+      }
+      
+      if (config.forceInclude && config.forceInclude.length > 0) {
+        output += `⭐ Force Include Patterns:\n`;
+        config.forceInclude.forEach(pattern => {
+          output += `   • ${pattern}\n`;
+        });
+        output += '\n';
+      }
+      
+      output += '🎨 Tip: Edit the config file directly or use the CLI setup for interactive configuration.';
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: output
+          }
+        ]
+      };
+      
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `🚨 Configuration error: ${error.message}`
+          }
+        ]
+      };
     }
   }
 
@@ -559,7 +821,7 @@ class ClaudePointMCPServer {
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
       console.error('ClaudePoint MCP server running on stdio');
-      console.error('Available tools: setup_claudepoint, create_checkpoint, list_checkpoints, restore_checkpoint, get_changelog, set_changelog, init_slash_commands');
+      console.error('Available tools: setup_claudepoint, create_claudepoint, list_claudepoints, restore_claudepoint, undo_claudepoint, get_changes, configure_claudepoint, get_changelog, set_changelog, init_slash_commands');
       
       // Keep the process alive
       process.on('SIGINT', () => {

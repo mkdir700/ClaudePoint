@@ -9,74 +9,74 @@ async function initializeSlashCommands(projectRoot = process.cwd()) {
   // Create commands directory
   await fsPromises.mkdir(commandsDir, { recursive: true });
   
-  // Create /create-checkpoint command
-  const createCheckpointContent = `---
-description: Create a new checkpoint of your codebase
+  // Create /claudepoint command (main action)
+  const claudepointContent = `---
+description: Deploy a new claudepoint // Lock in your digital DNA
 argument-hint: [name] [description]
 ---
 
-Use the ClaudePoint MCP tool to create a new checkpoint.
+💾 Deploy a claudepoint! Use the ClaudePoint MCP tool to create a new claudepoint.
 
 If arguments are provided:
-- First argument: checkpoint name
+- First argument: claudepoint name  
 - Remaining arguments: description
 
-Example: /create-checkpoint auth-working Authentication system working perfectly
+Example: /claudepoint auth-working Authentication system hacked to perfection
 
 Steps:
-1. Use the create_checkpoint tool from ClaudePoint
+1. Use the create_claudepoint tool from ClaudePoint
 2. Pass the name and description from $ARGUMENTS if provided
-3. Confirm the checkpoint was created successfully
+3. Celebrate the successful deployment with a cool message!
 `;
   
-  // Create /restore-checkpoint command
-  const restoreCheckpointContent = `---
-description: Restore a previous checkpoint with interactive selection
+  // Create /claudepoint-restore command
+  const claudepointRestoreContent = `---
+description: Time travel to a specific claudepoint // Precision restoration
 ---
 
-Help the user restore a checkpoint using ClaudePoint's restore_checkpoint tool.
+🔄 Help the user time travel using ClaudePoint's restore_claudepoint tool.
 
 Steps:
-1. First, use the list_checkpoints tool to show all available checkpoints with numbering
-2. Ask the user: "Which checkpoint would you like to restore? Please provide the number or name."
+1. First, use the list_claudepoints tool to show all available claudepoints with numbering
+2. Ask the user: "Which claudepoint would you like to time travel to? Please provide the number or name."
 3. Wait for the user to respond with their selection
-4. Use the restore_checkpoint tool with the selected checkpoint name
-5. Confirm the restoration was successful
+4. Use the restore_claudepoint tool with the selected claudepoint name
+5. Celebrate the successful time travel with a cool message!
 
 Important: Always show the numbered list first and wait for user selection.
 `;
   
-  // Create /list-checkpoints command
-  const listCheckpointsContent = `---
-description: List all available checkpoints
+  // Create /claudepoint-list command
+  const claudepointListContent = `---
+description: Browse your claudepoint vault // Digital artifact collection
 ---
 
-Use the ClaudePoint MCP tool list_checkpoints to show all available checkpoints.
+🗂️ Use the ClaudePoint MCP tool list_claudepoints to browse your vault.
 
-Display the results in a clear, organized format showing:
-- Checkpoint name
+Display the results with hacker style showing:
+- Claudepoint name
 - Description
 - Date created
 - Number of files
 - Size
 `;
   
-  // Create /checkpoint-status command
-  const checkpointStatusContent = `---
-description: Show current checkpoint status and recent activity
+  // Create /claudepoint-status command
+  const claudepointStatusContent = `---
+description: Show claudepoint status and recent hacking activity
 ---
 
-Show the current status of checkpoints in this project using ClaudePoint tools.
+📡 Show the current status of your claudepoint vault using ClaudePoint tools.
 
 Steps:
-1. Use list_checkpoints to get total number of checkpoints and show the latest one
-2. Use get_changelog to show recent checkpoint activity
+1. Use list_claudepoints to get total number and show the latest one
+2. Use get_changelog to show recent activity
 3. Present a summary including:
-   - Total number of checkpoints
-   - Latest checkpoint details
-   - Recent checkpoint operations (last 5 entries)
+   - Total number of claudepoints
+   - Latest claudepoint details  
+   - Recent operations (last 5 entries)
    
-Format the output clearly to give a quick overview of the checkpoint system status.
+Format with cool emojis and hacker language!
 `;
 
   // Create /claudepoint-init-hooks command
@@ -137,26 +137,136 @@ Steps:
 
 This gives users control over documentation level.
 `;
+
+  // Create /ultrathink command
+  const ultrathinkContent = `---
+description: Activate ultrathink mode // Deep analysis and reasoning
+---
+
+🧠 Execute ultrathink prompt for enhanced reasoning and analysis.
+
+This command simply runs the "ultrathink" prompt to activate Claude's deep thinking mode.
+
+Steps:
+1. Execute the prompt: ultrathink
+2. Let Claude engage in enhanced reasoning and analysis
+
+Perfect for complex problems that need deeper thought.
+`;
+
+  // Create /undo command
+  const undoContent = `---
+description: Instant time hack // Quick restore to your last claudepoint
+---
+
+🔄 Instant time travel back to your last claudepoint! Use the ClaudePoint MCP tool for quick restoration.
+
+Steps:
+1. Use the undo_claudepoint tool from ClaudePoint
+2. This will automatically restore your last claudepoint
+3. Celebrate the successful time hack with a cool message!
+
+Perfect for when you need to quickly undo recent changes and get back to a stable state.
+`;
+
+  // Create /changes command
+  const changesContent = `---
+description: Scan codebase for changes // See what's different since your last claudepoint
+---
+
+🔍 Use the ClaudePoint MCP tool get_changes to scan for modifications.
+
+Steps:
+1. Use the get_changes tool from ClaudePoint
+2. Display changes with cool hacker formatting:
+   - Added files (green +)
+   - Modified files (yellow ~) 
+   - Deleted files (red -)
+3. Show totals and encourage deployment if changes found
+
+Perfect for reviewing what Claude Code has modified in your project.
+`;
+
+  // Create /claudepoint-changelog command
+  const claudepointChangelogContent = `---
+description: View your coding adventure timeline // Development history
+---
+
+📡 Use the ClaudePoint MCP tool get_changelog to view your development timeline.
+
+Display the timeline with:
+- Action types (CREATE_CLAUDEPOINT, RESTORE, etc.)
+- Timestamps
+- Descriptions and details
+- Recent activity focus
+
+This shows your complete coding journey across all sessions.
+`;
+
+  // Create /claudepoint-changelog-add command  
+  const claudepointChangelogAddContent = `---
+description: Add custom entry to development timeline // Document your work
+argument-hint: [description] [details]
+---
+
+📝 Use the ClaudePoint MCP tool set_changelog to add custom timeline entries.
+
+If arguments are provided:
+- First part: description of what was done
+- Remaining: detailed explanation
+
+Example: /claudepoint-changelog-add "Fixed authentication bug" "Resolved OAuth token expiration issue affecting user sessions"
+
+Steps:
+1. Use the set_changelog tool with appropriate action type
+2. Pass description and details from $ARGUMENTS
+3. Confirm the entry was added to timeline
+
+Great for documenting your work as you go!
+`;
+
+  // Create /claudepoint-setup command
+  const claudepointSetupContent = `---
+description: Initialize ClaudePoint // Setup project for hacking
+---
+
+🎆 Use the ClaudePoint MCP tool setup_claudepoint to initialize ClaudePoint.
+
+This will:
+- Create .claudepoint directory structure
+- Update .gitignore for stealth mode
+- Create initial configuration
+- Deploy initial claudepoint if project has files
+
+Steps:
+1. Use setup_claudepoint tool
+2. Celebrate ClaudePoint going online!
+3. Explain next steps for fearless experimentation
+
+Perfect for getting started with ClaudePoint in any project.
+`;
   
-  // Write all command files
-  await fsPromises.writeFile(path.join(commandsDir, 'create-checkpoint.md'), createCheckpointContent);
-  await fsPromises.writeFile(path.join(commandsDir, 'restore-checkpoint.md'), restoreCheckpointContent);
-  await fsPromises.writeFile(path.join(commandsDir, 'list-checkpoints.md'), listCheckpointsContent);
-  await fsPromises.writeFile(path.join(commandsDir, 'checkpoint-status.md'), checkpointStatusContent);
-  await fsPromises.writeFile(path.join(commandsDir, 'claudepoint-init-hooks.md'), initHooksContent);
-  await fsPromises.writeFile(path.join(commandsDir, 'claudepoint-hooks-status.md'), hooksStatusContent);
-  await fsPromises.writeFile(path.join(commandsDir, 'claudepoint-hooks-toggle-changelog.md'), toggleChangelogContent);
+  // Write all command files with clean names
+  await fsPromises.writeFile(path.join(commandsDir, 'claudepoint.md'), claudepointContent);
+  await fsPromises.writeFile(path.join(commandsDir, 'undo.md'), undoContent);
+  await fsPromises.writeFile(path.join(commandsDir, 'claudepoint-list.md'), claudepointListContent);
+  await fsPromises.writeFile(path.join(commandsDir, 'claudepoint-restore.md'), claudepointRestoreContent);
+  await fsPromises.writeFile(path.join(commandsDir, 'changes.md'), changesContent);
+  await fsPromises.writeFile(path.join(commandsDir, 'claudepoint-changelog.md'), claudepointChangelogContent);
+  await fsPromises.writeFile(path.join(commandsDir, 'claudepoint-changelog-add.md'), claudepointChangelogAddContent);
+  await fsPromises.writeFile(path.join(commandsDir, 'ultrathink.md'), ultrathinkContent);
   
   return {
     success: true,
     commandsCreated: [
-      'create-checkpoint',
-      'restore-checkpoint', 
-      'list-checkpoints',
-      'checkpoint-status',
-      'claudepoint-init-hooks',
-      'claudepoint-hooks-status', 
-      'claudepoint-hooks-toggle-changelog'
+      'claudepoint',
+      'undo',
+      'claudepoint-list',
+      'claudepoint-restore', 
+      'changes',
+      'claudepoint-changelog',
+      'claudepoint-changelog-add',
+      'ultrathink'
     ]
   };
 }

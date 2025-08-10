@@ -18,30 +18,338 @@ const { promises: fsPromises } = fs;
 const require = createRequire(import.meta.url);
 const packageJson = require('../package.json');
 
+// Progress bar animation function
+async function showProgressBar(message, steps) {
+  const spinner = ora(message).start();
+  const totalSteps = steps.length;
+  
+  for (let i = 0; i < totalSteps; i++) {
+    const step = steps[i];
+    spinner.text = `${message} [${i + 1}/${totalSteps}] ${step.text}`;
+    
+    if (step.action) {
+      await step.action();
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, step.delay || 300));
+  }
+  
+  return spinner;
+}
+
+// Configure MCP server based on scope
+async function configureMCPServer(scope = 'project') {
+  try {
+    // For project scope, we need to use Claude Code CLI
+    if (scope === 'project') {
+      // Check if we're in a Claude Code environment
+      const { execSync } = await import('child_process');
+      try {
+        // Try to add MCP server via Claude CLI
+        execSync(`claude mcp add claudepoint --command claudepoint`, { stdio: 'inherit' });
+        return { success: true, scope: 'project' };
+      } catch (error) {
+        // Fall back to manual instruction
+        return { 
+          success: false, 
+          manual: true,
+          instructions: 'Run in Claude Code: claude mcp add claudepoint --command claudepoint'
+        };
+      }
+    }
+    
+    // For user/global scope, modify config file
+    const configPath = scope === 'user' 
+      ? path.join(os.homedir(), '.claude', 'mcp_servers.json')
+      : path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+    
+    let config = {};
+    try {
+      const configData = await fsPromises.readFile(configPath, 'utf8');
+      config = JSON.parse(configData);
+    } catch {
+      // File doesn't exist, create new
+    }
+    
+    if (!config.mcpServers) {
+      config.mcpServers = {};
+    }
+    
+    // Check for existing claudepoint entries
+    const existingKeys = Object.keys(config.mcpServers).filter(key => 
+      key === 'claudepoint' || key.startsWith('claudepoint_')
+    );
+    
+    if (existingKeys.length > 0) {
+      return { alreadyConfigured: true, scope, existingKeys };
+    }
+    
+    // Get the full path to claudepoint binary
+    const { execSync } = await import('child_process');
+    let claudepointPath;
+    try {
+      claudepointPath = execSync('which claudepoint', { encoding: 'utf8' }).trim();
+    } catch {
+      // Fallback - try common paths
+      const commonPaths = [
+        '/usr/local/bin/claudepoint',
+        '/opt/homebrew/bin/claudepoint',
+        path.join(os.homedir(), '.npm-global/bin/claudepoint')
+      ];
+      claudepointPath = commonPaths.find(p => {
+        try {
+          require('fs').accessSync(p);
+          return true;
+        } catch {
+          return false;
+        }
+      }) || 'claudepoint';
+    }
+    
+    config.mcpServers.claudepoint = {
+      command: claudepointPath,
+      args: []
+    };
+    
+    await fsPromises.mkdir(path.dirname(configPath), { recursive: true });
+    await fsPromises.writeFile(configPath, JSON.stringify(config, null, 2));
+    
+    return { success: true, scope, configPath };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+// Configure hooks based on scope
+async function configureHooks(scope = 'project', triggers = ['before_bulk_edit']) {
+  try {
+    const settingsPath = scope === 'project'
+      ? path.join(process.cwd(), '.claude', 'settings.json')
+      : path.join(os.homedir(), '.claude', 'settings.json');
+    
+    let settings = {};
+    try {
+      const data = await fsPromises.readFile(settingsPath, 'utf8');
+      settings = JSON.parse(data);
+    } catch {
+      // File doesn't exist
+    }
+    
+    if (!settings.hooks) {
+      settings.hooks = {};
+    }
+    
+    if (!Array.isArray(settings.hooks.PreToolUse)) {
+      settings.hooks.PreToolUse = [];
+    }
+    
+    // Remove existing claudepoint hooks
+    settings.hooks.PreToolUse = settings.hooks.PreToolUse.filter(hook => 
+      !hook.hooks || !hook.hooks.some(h => h.command && h.command.includes('claudepoint-hook'))
+    );
+    
+    // Add hooks for specified triggers
+    const toolMap = {
+      'before_bulk_edit': ['MultiEdit'],
+      'before_major_write': ['Write'],
+      'before_bash_commands': ['Bash'],
+      'before_file_operations': ['*']
+    };
+    
+    triggers.forEach(trigger => {
+      const tools = toolMap[trigger] || [];
+      tools.forEach(tool => {
+        settings.hooks.PreToolUse.push({
+          matcher: tool,
+          hooks: [{
+            type: 'command',
+            command: `claudepoint-hook --trigger ${trigger} --tool ${tool}`
+          }]
+        });
+      });
+    });
+    
+    await fsPromises.mkdir(path.dirname(settingsPath), { recursive: true });
+    await fsPromises.writeFile(settingsPath, JSON.stringify(settings, null, 2));
+    
+    return { success: true, scope, settingsPath };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+// Original configureMCPServer function for backward compatibility
+async function configureMCPServerLegacy() {
+  try {
+    // Determine Claude Code config path based on platform
+    const platform = os.platform();
+    let configPath;
+    
+    if (platform === 'darwin') {
+      // macOS
+      configPath = path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+    } else if (platform === 'win32') {
+      // Windows
+      configPath = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Claude', 'claude_desktop_config.json');
+    } else {
+      // Linux or other
+      configPath = path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json');
+    }
+    
+    // Check if config file exists
+    let config = {};
+    let wasCreated = false;
+    
+    try {
+      const configData = await fsPromises.readFile(configPath, 'utf8');
+      config = JSON.parse(configData);
+    } catch (error) {
+      // Config doesn't exist, create new one
+      wasCreated = true;
+      config = {};
+    }
+    
+    // Check if ANY claudepoint configuration already exists (prevent duplicates)
+    if (config.mcpServers) {
+      const claudepointKeys = Object.keys(config.mcpServers).filter(key => 
+        key === 'claudepoint' || key.startsWith('claudepoint_')
+      );
+      if (claudepointKeys.length > 0) {
+        return { alreadyConfigured: true, configPath, existingKeys: claudepointKeys };
+      }
+    }
+    
+    // Add claudepoint configuration
+    if (!config.mcpServers) {
+      config.mcpServers = {};
+    }
+    
+    config.mcpServers.claudepoint = {
+      command: 'claudepoint',
+      args: []
+    };
+    
+    // Ensure directory exists
+    await fsPromises.mkdir(path.dirname(configPath), { recursive: true });
+    
+    // Write updated config
+    await fsPromises.writeFile(configPath, JSON.stringify(config, null, 2));
+    
+    return { success: true, configPath, wasCreated };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
 program
   .name('claudepoint')
-  .description('The safest way to experiment with Claude Code')
-  .version(packageJson.version);
+  .description('🚀 The ultimate hacking companion for Claude Code // Break things beautifully')
+  .version(packageJson.version)
+  .action(async (options, command) => {
+    // Default action when no command is specified - create a claudepoint!
+    if (command.args.length === 0) {
+      // Quick intro for deploy
+      console.log(chalk.green('    ⣿⣿⠋⠀⢀⣤⣶⣶⣶⣶⣶⣶⣤⡀⠀⠋⣿⣿'));
+      console.log(chalk.cyan('    >> CLAUDEPOINT DEPLOY SEQUENCE <<'));
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      const spinner = ora('💾 Deploying claudepoint...').start();
+      
+      try {
+        const manager = new CheckpointManager();
+        const result = await manager.create();
+        
+        if (result.success) {
+          spinner.succeed(manager.getRandomMessage(manager.successMessages));
+          console.log(chalk.cyan(`   Name: ${result.name}`));
+          console.log(chalk.gray(`   Files: ${result.fileCount} | Size: ${result.size}`));
+          console.log(chalk.gray(`   Description: ${result.description}`));
+        } else if (result.noChanges) {
+          spinner.info(chalk.yellow('🤔 No changes detected since last claudepoint // Codebase is stable'));
+        } else {
+          spinner.fail(`🚨 Deploy failed: ${result.error}`);
+        }
+      } catch (error) {
+        spinner.fail('🚨 Deploy error detected');
+        console.error(chalk.red('Error:'), error.message);
+      }
+    }
+  });
 
 program
   .command('setup')
-  .description('Setup ClaudePoint in the current project')
+  .description('🎆 Complete ClaudePoint setup // MCP + Hooks + Commands in one go')
+  .option('--scope <scope>', 'Configuration scope: project, user, or global', 'project')
   .option('--no-interactive', 'Skip interactive setup prompts')
+  .option('--force', 'Force reinstall even if already configured')
   .action(async (options) => {
-    console.log(chalk.blue('🎯 Welcome to ClaudePoint Setup!\n'));
+    // Matrix animation
+    console.log(chalk.green('    ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿'));
+    console.log(chalk.green('    ⣿⣿⣿⣿⣿⣿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⣿⣿⣿⣿'));
+    console.log(chalk.green('    ⣿⣿⣿⠿⠋⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠙⠿⣿⣿'));
+    console.log(chalk.green('    ⣿⣿⠋⠀⢀⣤⣶⣶⣶⣶⣶⣶⣤⡀⠀⠋⣿⣿'));
+    console.log(chalk.green('    ⣿⠋⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡄⠀⠋⣿'));
+    console.log(chalk.green('    ⡟⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡄⠀⢻'));
+    console.log(chalk.green('    ⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡄⠀'));
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    console.log(chalk.cyan.bold('\n    ╔═══════════════════════════════════════╗'));
+    console.log(chalk.cyan.bold('    ║     🕶️  CLAUDEPOINT MATRIX v1.4.4     ║'));
+    console.log(chalk.cyan.bold('    ║      >> INITIALIZING HACK MODE <<      ║'));
+    console.log(chalk.cyan.bold('    ╚═══════════════════════════════════════╝'));
+    
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Loading animation
+    const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+    let frameIndex = 0;
+    const loadingInterval = setInterval(() => {
+      process.stdout.write(`\r${chalk.green(frames[frameIndex])} ${chalk.cyan('Accessing neural pathways...')}   `);
+      frameIndex = (frameIndex + 1) % frames.length;
+    }, 100);
+    
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    clearInterval(loadingInterval);
+    process.stdout.write('\r                                        \r');
+    
+    console.log(chalk.green('✅ Neural pathways established'));
+    console.log(chalk.green('✅ Matrix protocols loaded'));
+    console.log(chalk.green('✅ Quantum tunnels active'));
+    
+    await new Promise(resolve => setTimeout(resolve, 400));
+    
+    console.log(chalk.blue.bold('\n🕶️ Welcome to the ClaudePoint Matrix!\n'));
     
     try {
       const manager = new CheckpointManager();
       
+      // Determine configuration scope
+      let configScope = options.scope;
+      
       // Interactive setup by default
       if (options.interactive !== false) {
-        console.log(chalk.gray('This wizard will help you configure ClaudePoint for your project.\n'));
+        console.log(chalk.gray('This wizard will set up ClaudePoint with MCP server, hooks, and commands.\n'));
+        
+        // Ask about scope
+        const { scope } = await inquirer.prompt([{
+          type: 'list',
+          name: 'scope',
+          message: '🎯 Choose configuration scope:',
+          choices: [
+            { name: 'Project (recommended) - Settings for this project only', value: 'project' },
+            { name: 'User - Available across all your projects', value: 'user' },
+            { name: 'Global - System-wide configuration', value: 'global' }
+          ],
+          default: 'project'
+        }]);
+        configScope = scope;
+        console.log(chalk.gray('This digital wizard will hack your way to the perfect ClaudePoint setup.\n'));
         
         // Ask about gitignore
         const { updateGitignore } = await inquirer.prompt([{
           type: 'confirm',
           name: 'updateGitignore',
-          message: 'Add .checkpoints to .gitignore?',
+          message: '🔒 Activate stealth mode (.claudepoint → .gitignore)?',
           default: true
         }]);
         
@@ -49,7 +357,7 @@ program
         const { createInitial } = await inquirer.prompt([{
           type: 'confirm',
           name: 'createInitial',
-          message: 'Create an initial checkpoint of your project?',
+          message: '💾 Deploy initial claudepoint to lock in your digital DNA?',
           default: true
         }]);
         
@@ -57,24 +365,32 @@ program
         const { installCommands } = await inquirer.prompt([{
           type: 'confirm',
           name: 'installCommands',
-          message: 'Install Claude Code slash commands (/create-checkpoint, etc)?',
+          message: '🚀 Install Claude Code command arsenal (/claudepoint, /undo, etc)?',
           default: true
         }]);
         
-        // Ask about hooks
-        const { installHooks } = await inquirer.prompt([{
+        // Ask about MCP configuration
+        const { configureMCP } = await inquirer.prompt([{
           type: 'confirm',
-          name: 'installHooks',
-          message: 'Enable automatic safety checkpoints (hooks)?',
+          name: 'configureMCP',
+          message: '⚙️ Configure ClaudePoint as MCP server in Claude Code?',
           default: true
         }]);
         
-        let hooksConfig = null;
-        if (installHooks) {
-          const { hookChoices } = await inquirer.prompt([{
+        // Ask about hooks with better UX
+        const { enableHooks } = await inquirer.prompt([{
+          type: 'confirm',
+          name: 'enableHooks',
+          message: '🪝 Enable automatic safety checkpoints before changes?',
+          default: true
+        }]);
+        
+        let selectedTriggers = [];
+        if (enableHooks) {
+          const { triggers } = await inquirer.prompt([{
             type: 'checkbox',
-            name: 'hookChoices',
-            message: 'Which safety triggers would you like to enable?',
+            name: 'triggers',
+            message: 'When should ClaudePoint create automatic checkpoints?',
             choices: [
               { name: 'Before bulk edits (MultiEdit)', value: 'before_bulk_edit', checked: true },
               { name: 'Before file writes (Write)', value: 'before_major_write', checked: false },
@@ -83,70 +399,106 @@ program
             ]
           }]);
           
-          const { enableChangelog } = await inquirer.prompt([{
-            type: 'confirm',
-            name: 'enableChangelog',
-            message: 'Enable automatic changelog entries for hook-created checkpoints?',
-            default: false
-          }]);
-          
-          hooksConfig = { triggers: hookChoices, enableChangelog };
+          selectedTriggers = triggers.length > 0 ? triggers : ['before_bulk_edit'];
         }
         
-        // Now perform setup with chosen options
-        const spinner = ora('Setting up ClaudePoint...').start();
+        // Now perform setup with chosen options using progress animation
+        const steps = [
+          { text: 'Creating .claudepoint vault...', action: async () => {}, delay: 400 },
+          { text: 'Loading configuration...', delay: 300 },
+          { text: 'Setting up file patterns...', delay: 350 },
+        ];
+        
+        if (updateGitignore) {
+          steps.push({ text: 'Updating .gitignore...', delay: 300 });
+        }
+        
+        if (createInitial) {
+          steps.push({ text: 'Creating initial checkpoint...', delay: 500 });
+        }
+        
+        const spinner = await showProgressBar('🚀 Initializing ClaudePoint', steps);
+        
+        // Perform actual setup
         const result = await manager.setup({ 
           updateGitignore, 
           createInitial 
         });
         
         if (result.success) {
-          spinner.succeed('ClaudePoint core setup complete!');
-          console.log(chalk.green('✅ Created .checkpoints directory'));
+          spinner.succeed('💾 ClaudePoint is ONLINE!');
+          console.log(chalk.green('✨ Created .claudepoint vault'));
           if (updateGitignore) {
-            console.log(chalk.green('✅ Updated .gitignore'));
+            console.log(chalk.green('🔒 Updated .gitignore (stealth mode activated)'));
           }
-          console.log(chalk.green('✅ Created configuration'));
+          console.log(chalk.green('⚙️ Configuration loaded'));
           
           if (result.initialCheckpoint) {
-            console.log(chalk.green(`✅ Created initial checkpoint: ${result.initialCheckpoint}`));
+            console.log(chalk.green(`✨ Deployed initial claudepoint: ${result.initialCheckpoint}`));
           }
           
           // Install slash commands if requested
           if (installCommands) {
-            spinner.start('Creating Claude Code slash commands...');
+            spinner.start('🚀 Deploying Claude Code slash command arsenal...');
             await initializeSlashCommands();
-            spinner.succeed('Slash commands created!');
-            console.log(chalk.green('✅ Created .claude/commands directory'));
-            console.log(chalk.green('✅ Added 4 slash commands'));
+            spinner.succeed('⚙️ Slash command arsenal deployed!');
+            console.log(chalk.green('✨ Created .claude/commands vault'));
+            console.log(chalk.green('🚀 Added claudepoint command arsenal'));
+          }
+          
+          // Configure MCP if requested
+          if (configureMCP) {
+            spinner.start(`Configuring MCP server (${configScope} scope)...`);
+            const configResult = await configureMCPServer(configScope);
+            if (configResult.success) {
+              spinner.succeed(`MCP server configured (${configScope} scope)!`);
+              if (configResult.configPath) {
+                console.log(chalk.green(`✅ Updated: ${configResult.configPath}`));
+              }
+              if (configScope === 'project') {
+                console.log(chalk.blue('\n📍 MCP configured for this project only'));
+              } else {
+                console.log(chalk.blue(`\n📍 MCP configured at ${configScope} level`));
+                if (configScope === 'user' || configScope === 'global') {
+                  console.log(chalk.yellow('   For each project, you may still need to:'));
+                  console.log(chalk.cyan('   claude mcp add-from-claude-desktop'));
+                }
+              }
+            } else if (configResult.alreadyConfigured) {
+              spinner.info(`MCP server already configured (${configScope} scope)`);
+              if (configResult.existingKeys) {
+                console.log(chalk.gray(`   Found: ${configResult.existingKeys.join(', ')}`));
+              }
+            } else if (configResult.manual) {
+              spinner.warn('Cannot auto-configure MCP in project scope');
+              console.log(chalk.yellow('\n📝 Run this command in Claude Code:'));
+              console.log(chalk.cyan(configResult.instructions));
+            } else {
+              spinner.warn(`Could not configure MCP: ${configResult.error}`);
+            }
           }
           
           // Setup hooks if requested
-          if (installHooks) {
-            spinner.start('Configuring hooks...');
-            const hooksManager = new CheckpointManager();
-            const hooksConfigData = await hooksManager.loadHooksConfig();
+          if (enableHooks && selectedTriggers.length > 0) {
+            spinner.start(`Configuring hooks (${configScope} scope)...`);
             
-            // Update enabled triggers
-            Object.keys(hooksConfigData.triggers).forEach(trigger => {
-              hooksConfigData.triggers[trigger].enabled = hooksConfig.triggers.includes(trigger);
-            });
-            hooksConfigData.auto_changelog = hooksConfig.enableChangelog;
+            // Configure hooks with proper format
+            const hooksResult = await configureHooks(configScope, selectedTriggers);
             
-            await hooksManager.saveHooksConfig(hooksConfigData);
-            
-            // Install to Claude Code settings
-            spinner.text = 'Installing hooks to Claude Code settings...';
-            const { execSync } = await import('child_process');
-            try {
-              execSync('claudepoint init-hooks --install', { stdio: 'inherit' });
-              spinner.succeed('Hooks configured and installed to Claude Code!');
-              console.log(chalk.green('✅ Enabled triggers: ' + hooksConfig.triggers.join(', ')));
-              console.log(chalk.blue('🔄 Remember to restart Claude Code to activate hooks'));
-            } catch (error) {
-              spinner.succeed('Hooks configured locally!');
-              console.log(chalk.yellow('⚠️  Failed to auto-install to Claude Code'));
-              console.log(chalk.yellow('   Run manually: claudepoint init-hooks --install'));
+            if (hooksResult.success) {
+              spinner.succeed(`Hooks configured (${configScope} scope)!`);
+              console.log(chalk.green(`✅ Updated: ${hooksResult.settingsPath}`));
+              console.log(chalk.green(`✅ Enabled triggers: ${selectedTriggers.join(', ')}`));
+              
+              // Also save local hook config for the hook binary
+              const hooksManager = new CheckpointManager();
+              const hooksConfigData = await hooksManager.loadHooksConfig();
+              Object.keys(hooksConfigData.triggers).forEach(trigger => {
+                hooksConfigData.triggers[trigger].enabled = selectedTriggers.includes(trigger);
+              });
+              await hooksManager.saveHooksConfig(hooksConfigData);
+            } else {
+              spinner.warn(`Could not configure hooks: ${hooksResult.error}`);
             }
           }
           
@@ -156,30 +508,49 @@ program
           console.log(`  🔧 Gitignore: ${updateGitignore ? chalk.green('Updated') : chalk.gray('Skipped')}`);
           console.log(`  📸 Initial checkpoint: ${createInitial && result.initialCheckpoint ? chalk.green('Created') : chalk.gray('Skipped')}`);
           console.log(`  📝 Slash commands: ${installCommands ? chalk.green('Installed') : chalk.gray('Skipped')}`);
-          console.log(`  🪝 Hooks: ${installHooks ? chalk.green('Configured & Installed to Claude Code') : chalk.gray('Skipped')}`);
+          console.log(`  ⚙️ MCP Server: ${configureMCP ? chalk.green('Configured') : chalk.gray('Skipped')}`);
+          console.log(`  🪝 Hooks: ${enableHooks ? chalk.green('Configured & Installed to Claude Code') : chalk.gray('Skipped')}`);
           
           console.log(chalk.yellow('\n💡 Next steps:'));
-          console.log('  1. Restart Claude Code to activate hooks (if installed)');
-          console.log('  2. Start using ClaudePoint with Claude Code');
-          console.log('  3. Create checkpoints before major changes');
-          console.log('  4. Use "claudepoint --help" to see all commands');
+          console.log('  1. Restart Claude Code to activate hooks');
+          if (configScope !== 'project') {
+            console.log(chalk.red('  2. 🚨 IMPORTANT: Run this in your project terminal:'));
+            console.log('     ' + chalk.cyan('claude mcp add-from-claude-desktop'));
+            console.log('  3. Test with /claudepoint command in Claude Code');
+          } else {
+            console.log('  2. Test with /claudepoint command in Claude Code');
+          }
+          console.log('  4. Create checkpoints before major changes');
+          console.log('  5. Use "claudepoint --help" to see all commands');
+          
+          console.log(chalk.gray('\n🔍 To verify MCP is working:'));
+          console.log(chalk.gray('   - Type /claudepoint in Claude Code'));
+          console.log(chalk.gray('   - You should see ClaudePoint tools available'));
+          console.log(chalk.gray('   - If not working, make sure you did step 2 above!'));
         } else {
           spinner.fail(`Setup failed: ${result.error}`);
           process.exit(1);
         }
       } else {
-        // Non-interactive mode (original behavior)
-        const spinner = ora('Setting up ClaudePoint...').start();
+        // Non-interactive mode with progress
+        const steps = [
+          { text: 'Creating .claudepoint vault...', delay: 400 },
+          { text: 'Loading configuration...', delay: 300 },
+          { text: 'Updating .gitignore...', delay: 300 },
+          { text: 'Setting up patterns...', delay: 350 }
+        ];
+        
+        const spinner = await showProgressBar('🚀 Initializing ClaudePoint', steps);
         const result = await manager.setup();
         
         if (result.success) {
-          spinner.succeed('ClaudePoint setup complete!');
-          console.log(chalk.green('✅ Created .checkpoints directory'));
-          console.log(chalk.green('✅ Updated .gitignore'));
-          console.log(chalk.green('✅ Created configuration'));
+          spinner.succeed('💾 ClaudePoint is ONLINE!');
+          console.log(chalk.green('✨ Created .claudepoint vault'));
+          console.log(chalk.green('🔒 Updated .gitignore (stealth mode activated)'));
+          console.log(chalk.green('⚙️ Configuration loaded'));
           
           if (result.initialCheckpoint) {
-            console.log(chalk.green(`✅ Created initial checkpoint: ${result.initialCheckpoint}`));
+            console.log(chalk.green(`✨ Deployed initial claudepoint: ${result.initialCheckpoint}`));
           }
           
           console.log(chalk.yellow('\n💡 Run "claudepoint setup" again for interactive configuration'));
@@ -196,31 +567,43 @@ program
 
 program
   .command('create')
-  .description('Create a new checkpoint')
+  .description('💾 Deploy a new claudepoint // Lock in your digital DNA')
   .option('-n, --name <n>', 'Custom checkpoint name')
   .option('-d, --description <description>', 'Checkpoint description')
-  .option('-f, --full', 'Force full checkpoint (disable incremental)')
+  .option('--debug', 'Show debug information about file discovery')
   .action(async (options) => {
-    const spinner = ora('Creating checkpoint...').start();
+    const spinner = ora('💾 Deploying claudepoint...').start();
     
     try {
       const manager = new CheckpointManager();
-      const result = await manager.create(options.name, options.description, options.full);
+      
+      // Debug mode: Show file discovery info
+      if (options.debug) {
+        spinner.text = 'Discovering project files...';
+        const files = await manager.getProjectFiles();
+        spinner.stop();
+        console.log(chalk.blue(`\n🔍 Debug: Found ${files.length} files:`));
+        files.slice(0, 20).forEach(file => console.log(chalk.gray(`  ${file}`)));
+        if (files.length > 20) {
+          console.log(chalk.gray(`  ... and ${files.length - 20} more files`));
+        }
+        console.log('');
+        spinner.start('Creating checkpoint...');
+      }
+      
+      const result = await manager.create(options.name, options.description);
       
       if (result.success) {
-        const typeLabel = result.type === 'FULL' ? chalk.green('[FULL]') : chalk.yellow('[INC]');
-        spinner.succeed(`Checkpoint created: ${chalk.cyan(result.name)} ${typeLabel}`);
-        console.log(`   Files: ${result.fileCount}`);
-        if (result.type === 'INCREMENTAL') {
-          console.log(`   Changes: ${result.changesCount}`);
-        }
-        console.log(`   Size: ${result.size}`);
-        console.log(`   Description: ${result.description}`);
+        spinner.succeed(manager.getRandomMessage(manager.successMessages));
+        console.log(chalk.cyan(`   Name: ${result.name} ${chalk.green('[DEPLOYED]')}`));
+        console.log(chalk.gray(`   Files: ${result.fileCount}`));
+        console.log(chalk.gray(`   Size: ${result.size}`));
+        console.log(chalk.gray(`   Description: ${result.description}`));
       } else if (result.noChanges) {
-        spinner.info(chalk.yellow('No changes detected since last checkpoint'));
-        console.log('Use --full flag to force a full checkpoint anyway');
+        spinner.info(chalk.yellow('🤔 No changes detected since last claudepoint // Codebase is stable'));
+        console.log('Make some changes and redeploy when ready');
       } else {
-        spinner.fail(`Create failed: ${result.error}`);
+        spinner.fail(`🚨 Deploy failed: ${result.error}`);
         process.exit(1);
       }
     } catch (error) {
@@ -230,9 +613,38 @@ program
     }
   });
 
+// 🚀 NEW: Quick undo command
+program
+  .command('undo')
+  .description('🔄 Instant time hack // Restore your last claudepoint')
+  .action(async () => {
+    const spinner = ora('🕰️ Initiating time hack...').start();
+    
+    try {
+      const manager = new CheckpointManager();
+      const result = await manager.undoLastClaudepoint();
+      
+      if (result.success) {
+        spinner.succeed(manager.getRandomMessage(manager.undoMessages));
+        console.log(chalk.green(`   🛡️ Emergency backup: ${result.emergencyBackup}`));
+        console.log(chalk.cyan(`   🔄 Restored: ${result.restored}`));
+        console.log(chalk.gray(`   📅 Back to the future: ${result.type || 'FULL'} claudepoint`));
+      } else if (result.noClaudepoints) {
+        spinner.info(chalk.yellow('🤔 No claudepoints found to undo. Time to create your first safety net!'));
+      } else {
+        spinner.fail(`🚨 Time hack failed: ${result.error}`);
+        process.exit(1);
+      }
+    } catch (error) {
+      spinner.fail('🚨 Error during time hack');
+      console.error(chalk.red('Error:'), error.message);
+      process.exit(1);
+    }
+  });
+
 program
   .command('list')
-  .description('List all checkpoints')
+  .description('🗂️ Browse your claudepoint vault // Digital artifact collection')
   .option('--show-chain', 'Show checkpoint chain information')
   .action(async (options) => {
     try {
@@ -240,12 +652,13 @@ program
       const checkpoints = await manager.getCheckpoints();
       
       if (checkpoints.length === 0) {
-        console.log(chalk.yellow('No checkpoints found.'));
-        console.log('Create your first checkpoint with: claudepoint create');
+        console.log(chalk.yellow('🤔 No claudepoints found in the vault.'));
+        console.log('🚀 Deploy your first claudepoint with: claudepoint');
         return;
       }
 
-      console.log(chalk.blue(`📋 Available checkpoints (${checkpoints.length}):`));
+      console.log(chalk.blue(manager.getRandomMessage(manager.listMessages)));
+      console.log(chalk.blue(`📦 Total claudepoints: ${checkpoints.length}`));
       
       for (let index = 0; index < checkpoints.length; index++) {
         const cp = checkpoints[index];
@@ -288,9 +701,130 @@ program
     }
   });
 
+// 🎯 NEW: Changes command - see what's different since last claudepoint
+program
+  .command('changes')
+  .description("🔍 Scan for changes // See what's different since your last claudepoint")
+  .action(async () => {
+    const spinner = ora('🔍 Scanning for changes...').start();
+    
+    try {
+      const manager = new CheckpointManager();
+      const changes = await manager.getChangedFilesSinceLastClaudepoint();
+      
+      if (changes.error) {
+        spinner.fail(`🚨 Scan error: ${changes.error}`);
+        return;
+      }
+      
+      if (!changes.hasLastClaudepoint) {
+        spinner.info('🆕 No previous claudepoint found // Everything is new!');
+        console.log(chalk.blue(`📁 Total files in project: ${changes.totalChanges}`));
+        console.log(chalk.gray('   Deploy your first claudepoint to track changes'));
+        return;
+      }
+      
+      if (changes.totalChanges === 0) {
+        spinner.succeed('✨ Codebase is stable // No changes detected');
+        console.log(chalk.green(`📍 Last claudepoint: ${changes.lastClaudepointName}`));
+        console.log(chalk.gray(`   Created: ${changes.lastClaudepointDate}`));
+        console.log(chalk.blue("🎯 Perfect time to experiment - you're fully protected!"));
+        return;
+      }
+      
+      spinner.succeed(`🎯 Changes detected: ${changes.totalChanges} modifications found`);
+      console.log(chalk.blue(`📍 Since claudepoint: ${changes.lastClaudepointName}`));
+      console.log(chalk.gray(`   Created: ${changes.lastClaudepointDate}`));
+      
+      if (changes.added.length > 0) {
+        console.log(chalk.green(`\\n➕ Added files (${changes.added.length}):`));
+        changes.added.slice(0, 10).forEach(file => {
+          console.log(chalk.green(`   + ${file}`));
+        });
+        if (changes.added.length > 10) {
+          console.log(chalk.gray(`   ... and ${changes.added.length - 10} more`));
+        }
+      }
+      
+      if (changes.modified.length > 0) {
+        console.log(chalk.yellow(`\\n📝 Modified files (${changes.modified.length}):`));
+        changes.modified.slice(0, 10).forEach(file => {
+          console.log(chalk.yellow(`   ~ ${file}`));
+        });
+        if (changes.modified.length > 10) {
+          console.log(chalk.gray(`   ... and ${changes.modified.length - 10} more`));
+        }
+      }
+      
+      if (changes.deleted.length > 0) {
+        console.log(chalk.red(`\\n🗑️ Deleted files (${changes.deleted.length}):`));
+        changes.deleted.slice(0, 10).forEach(file => {
+          console.log(chalk.red(`   - ${file}`));
+        });
+        if (changes.deleted.length > 10) {
+          console.log(chalk.gray(`   ... and ${changes.deleted.length - 10} more`));
+        }
+      }
+      
+      console.log(chalk.blue('\\n💡 Ready to lock in these changes? Run: claudepoint'));
+      
+    } catch (error) {
+      spinner.fail('🚨 Scan error');
+      console.error(chalk.red('Error:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// 🎛️ NEW: Configuration command
+program
+  .command('config')
+  .description('⚙️ Enter configuration mode // Tune your hacking rig')
+  .action(async () => {
+    const spinner = ora('🔧 Loading configuration...').start();
+    
+    try {
+      const manager = new CheckpointManager();
+      const status = await manager.getConfigurationStatus();
+      
+      spinner.succeed(manager.getRandomMessage(manager.configMessages));
+      
+      console.log(chalk.blue('\n🎛️ Current Configuration:'));
+      console.log(chalk.cyan(`   Max Claudepoints: ${status.maxClaudepoints}`));
+      console.log(chalk.cyan(`   Current Claudepoints: ${status.currentClaudepoints}`));
+      console.log(chalk.cyan(`   Max Age: ${status.maxAge} days ${status.maxAge === 0 ? '(unlimited)' : ''}`));
+      console.log(chalk.cyan(`   Ignore Patterns: ${status.ignorePatterns} rules`));
+      console.log(chalk.cyan(`   Auto Naming: ${status.autoName ? 'Enabled' : 'Disabled'}`));
+      console.log(chalk.gray(`   Config File: ${status.configPath}`));
+      
+      console.log(chalk.blue('\n🎨 Quick Config Commands:'));
+      console.log(chalk.yellow('   • Edit config file directly with your favorite editor'));
+      console.log(chalk.yellow('   • Or use the interactive setup: claudepoint setup'));
+      
+      const config = await manager.loadConfig();
+      if (config.additionalIgnores && config.additionalIgnores.length > 0) {
+        console.log(chalk.blue('\n🚷 Additional Ignore Patterns:'));
+        config.additionalIgnores.forEach(pattern => {
+          console.log(chalk.gray(`   • ${pattern}`));
+        });
+      }
+      
+      if (config.forceInclude && config.forceInclude.length > 0) {
+        console.log(chalk.blue('\n⭐ Force Include Patterns:'));
+        config.forceInclude.forEach(pattern => {
+          console.log(chalk.green(`   • ${pattern}`));
+        });
+      }
+      
+    } catch (error) {
+      spinner.fail('🚨 Configuration error');
+      console.error(chalk.red('Error:'), error.message);
+      process.exit(1);
+    }
+  });
+
 program
   .command('restore <checkpoint>')
-  .description('Restore a checkpoint')
+  .description('🔄 Time travel to a specific claudepoint // Precision restoration')
   .option('--dry-run', 'Show what would happen without making changes')
   .action(async (checkpoint, options) => {
     try {
@@ -338,34 +872,35 @@ program
       }
 
       // Create emergency backup and confirm
-      console.log(chalk.blue('📦 This will create an emergency backup before restoring...'));
+      console.log(chalk.blue('🔒 Emergency backup protocol initiated...'));
       
       const { confirm } = await inquirer.prompt([{
         type: 'confirm',
         name: 'confirm',
-        message: `Restore checkpoint '${checkpoint}'? This will modify your codebase.`,
+        message: `🔄 Restore claudepoint '${checkpoint}'? This will modify your codebase.`,
         default: false
       }]);
 
       if (!confirm) {
-        console.log(chalk.red('❌ Restoration cancelled'));
+        console.log(chalk.red('❌ Time travel cancelled // Codebase remains stable'));
         return;
       }
 
-      const spinner = ora('Restoring checkpoint...').start();
+      const spinner = ora('🔄 Initiating time travel sequence...').start();
       const result = await manager.restore(checkpoint, false);
       
       if (result.success) {
         const typeLabel = result.type === 'FULL' ? '[FULL]' : 
                          result.type === 'INCREMENTAL' ? '[INC]' : '';
-        spinner.succeed(`Checkpoint restored successfully! ${typeLabel}`);
-        console.log(chalk.green(`   Emergency backup created: ${result.emergencyBackup}`));
-        console.log(chalk.green(`   Restored: ${result.restored}`));
+        spinner.succeed(manager.getRandomMessage(manager.undoMessages));
+        console.log(chalk.green(`   🔒 Emergency backup: ${result.emergencyBackup}`));
+        console.log(chalk.cyan(`   🔄 Restored: ${result.restored} ${typeLabel}`));
         if (result.type === 'INCREMENTAL') {
-          console.log(chalk.yellow(`   Restoration used incremental chain reconstruction`));
+          console.log(chalk.yellow(`   ⚡ Used incremental chain reconstruction`));
         }
+        console.log(chalk.blue('   🎆 Welcome back to the past! Time travel complete.'));
       } else {
-        spinner.fail(`Restore failed: ${result.error}`);
+        spinner.fail(`🚨 Time travel failed: ${result.error}`);
         process.exit(1);
       }
     } catch (error) {
@@ -504,18 +1039,24 @@ program
       await manager.saveHooksConfig(defaultHooksConfig);
       spinner.text = 'Creating Claude Code hooks configuration...';
       
-      // Build Claude Code hooks configuration dynamically based on enabled triggers
+      // Build Claude Code hooks configuration with CORRECT format
       const claudeHooksConfig = {
         hooks: {
-          PreToolUse: {}
+          PreToolUse: []
         }
       };
       
-      // Add hooks for each enabled trigger
+      // Add hooks for each enabled trigger with proper structure
       Object.entries(defaultHooksConfig.triggers).forEach(([triggerName, triggerConfig]) => {
         if (triggerConfig.enabled && triggerConfig.tools) {
           triggerConfig.tools.forEach(tool => {
-            claudeHooksConfig.hooks.PreToolUse[tool] = `claudepoint-hook --trigger ${triggerName} --tool ${tool}`;
+            claudeHooksConfig.hooks.PreToolUse.push({
+              matcher: tool,
+              hooks: [{
+                type: "command",
+                command: `claudepoint-hook --trigger ${triggerName} --tool ${tool}`
+              }]
+            });
           });
         }
       });
@@ -544,9 +1085,18 @@ program
           existingSettings.hooks.PreToolUse = {};
         }
         
-        // Add ClaudePoint hooks
-        existingSettings.hooks.PreToolUse.MultiEdit = claudeHooksConfig.hooks.PreToolUse.MultiEdit;
-        existingSettings.hooks.PreToolUse.Write = claudeHooksConfig.hooks.PreToolUse.Write;
+        // Add ClaudePoint hooks with proper structure
+        if (!Array.isArray(existingSettings.hooks.PreToolUse)) {
+          existingSettings.hooks.PreToolUse = [];
+        }
+        
+        // Remove existing claudepoint hooks to avoid duplicates
+        existingSettings.hooks.PreToolUse = existingSettings.hooks.PreToolUse.filter(hook => 
+          !hook.hooks || !hook.hooks.some(h => h.command && h.command.includes('claudepoint-hook'))
+        );
+        
+        // Add new hooks
+        existingSettings.hooks.PreToolUse.push(...claudeHooksConfig.hooks.PreToolUse);
         
         // Ensure .claude directory exists
         await fsPromises.mkdir(path.dirname(claudeSettingsPath), { recursive: true });
@@ -559,6 +1109,8 @@ program
         console.log(chalk.green('✅ Configured default safety hooks'));
         console.log(chalk.green('✅ Installed hooks to ~/.claude/settings.json'));
         
+        console.log(chalk.yellow('\n⚠️  Note: Hooks are installed globally in Claude Code'));
+        console.log(chalk.gray('   Running setup in other projects will update the global hook configuration'));
         console.log(chalk.blue('\n🔄 Restart Claude Code to activate hooks'));
         
       } else {
@@ -841,5 +1393,455 @@ hooksCommand
       process.exit(1);
     }
   });
+
+// Uninstall command - cleanly remove ClaudePoint from system
+// Debug command to check MCP configuration
+// Command to help with project MCP setup
+program
+  .command('mcp-setup')
+  .description('🎯 Setup MCP in current project // Import from Claude Desktop')
+  .action(async () => {
+    console.log(chalk.blue.bold('\n🎯 ClaudePoint MCP Project Setup'));
+    console.log(chalk.blue('=====================================\n'));
+    
+    // Check if global config exists
+    const platform = os.platform();
+    let configPath;
+    
+    if (platform === 'darwin') {
+      configPath = path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+    } else if (platform === 'win32') {
+      configPath = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Claude', 'claude_desktop_config.json');
+    } else {
+      configPath = path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json');
+    }
+    
+    try {
+      const configData = await fsPromises.readFile(configPath, 'utf8');
+      const config = JSON.parse(configData);
+      
+      if (config.mcpServers && config.mcpServers.claudepoint) {
+        console.log(chalk.green('✅ ClaudePoint is configured globally in Claude Desktop'));
+        console.log(chalk.gray(`   Global config: ${configPath}`));
+        
+        console.log(chalk.yellow('\n📍 To use ClaudePoint in this project:'));
+        console.log(chalk.cyan('\n   1. Open Claude Code in this directory'));
+        console.log(chalk.cyan('   2. Run this command in Claude Code:'));
+        console.log(chalk.green.bold('      claude mcp add-from-claude-desktop'));
+        console.log(chalk.cyan('   3. Select "claudepoint" from the list'));
+        console.log(chalk.cyan('   4. Restart Claude Code'));
+        
+        console.log(chalk.blue('\n💡 Alternative: Manual project setup'));
+        console.log(chalk.gray('   Run in Claude Code: claude mcp add claudepoint'));
+        console.log(chalk.gray('   Command: claudepoint'));
+        console.log(chalk.gray('   Arguments: (leave empty)'));
+        
+      } else {
+        console.log(chalk.yellow('⚠️  ClaudePoint not found in global Claude Desktop config'));
+        console.log(chalk.cyan('\n   First run: claudepoint setup'));
+        console.log(chalk.cyan('   Then follow the instructions above'));
+      }
+      
+    } catch (error) {
+      console.log(chalk.red('❌ No Claude Desktop configuration found'));
+      console.log(chalk.yellow('\n   Run: claudepoint setup'));
+      console.log(chalk.yellow('   This will configure ClaudePoint globally'));
+    }
+    
+    console.log(chalk.gray('\n📝 Note: Claude Code has two MCP configurations:'));
+    console.log(chalk.gray('   1. Global (Claude Desktop) - shared across all projects'));
+    console.log(chalk.gray('   2. Project - specific to each project directory'));
+    console.log(chalk.gray('   ClaudePoint must be imported from global to project.'));
+  });
+
+program
+  .command('check-mcp')
+  .description('🔍 Check Claude Code MCP configuration // Debug MCP server status')
+  .action(async () => {
+    console.log(chalk.blue('🔍 Checking Claude Code MCP Configuration\n'));
+    
+    try {
+      const platform = os.platform();
+      let configPath;
+      
+      if (platform === 'darwin') {
+        configPath = path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+      } else if (platform === 'win32') {
+        configPath = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Claude', 'claude_desktop_config.json');
+      } else {
+        configPath = path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json');
+      }
+      
+      console.log(chalk.gray(`Config path: ${configPath}\n`));
+      
+      try {
+        const configData = await fsPromises.readFile(configPath, 'utf8');
+        const config = JSON.parse(configData);
+        
+        console.log(chalk.green('✅ Config file exists and is valid JSON'));
+        
+        if (config.mcpServers) {
+          const claudepointKeys = Object.keys(config.mcpServers).filter(key => 
+            key === 'claudepoint' || key.startsWith('claudepoint_')
+          );
+          
+          if (claudepointKeys.length > 0) {
+            console.log(chalk.green(`✅ Found ${claudepointKeys.length} claudepoint MCP entries:`));
+            claudepointKeys.forEach(key => {
+              const server = config.mcpServers[key];
+              console.log(chalk.cyan(`   ${key}: command="${server.command}", args=[${server.args.join(', ')}]`));
+            });
+          } else {
+            console.log(chalk.yellow('⚠️  No claudepoint entries found in mcpServers'));
+          }
+          
+          console.log(chalk.gray(`\nAll MCP servers in config:`));
+          Object.keys(config.mcpServers).forEach(key => {
+            console.log(chalk.gray(`   - ${key}`));
+          });
+        } else {
+          console.log(chalk.red('❌ No mcpServers section found in config'));
+        }
+        
+        console.log(chalk.gray('\nFull config file contents:'));
+        console.log(chalk.gray(JSON.stringify(config, null, 2)));
+        
+      } catch (error) {
+        console.log(chalk.red(`❌ Cannot read config file: ${error.message}`));
+        console.log(chalk.yellow('\n💡 Try running: claudepoint setup'));
+      }
+      
+      console.log(chalk.blue('\n📝 Troubleshooting tips:'));
+      console.log('1. Make sure Claude Code is completely closed');
+      console.log('2. Run: claudepoint uninstall && claudepoint setup');
+      console.log('3. Restart Claude Code after setup');
+      console.log('4. Check if claudepoint is globally installed: npm list -g claudepoint');
+      
+    } catch (error) {
+      console.error(chalk.red('Error checking MCP configuration:'), error.message);
+    }
+  });
+
+program
+  .command('uninstall')
+  .description('🗑️ Uninstall ClaudePoint from Claude Code // Clean removal of hooks and MCP')
+  .option('--delete-checkpoints', 'Delete .claudepoint directories and checkpoints (default: keep them)')
+  .option('--dry-run', 'Show what would be uninstalled without actually doing it')
+  .action(async (options) => {
+    console.log(chalk.red.bold('\n🗑️ CLAUDEPOINT UNINSTALLER'));
+    console.log(chalk.red('====================================='));
+    
+    if (options.dryRun) {
+      console.log(chalk.yellow('\n🔍 DRY RUN MODE - Nothing will be actually removed\n'));
+    }
+    
+    try {
+      const uninstallSteps = [];
+      
+      // Check what needs to be uninstalled
+      console.log(chalk.blue('🔍 Scanning for ClaudePoint installations...\n'));
+      
+      // 1. Check MCP configuration
+      const mcpResult = await checkMCPInstallation();
+      if (mcpResult.found) {
+        const entryCount = mcpResult.claudepointKeys.length;
+        const entryText = entryCount === 1 ? 'MCP server' : `${entryCount} MCP servers`;
+        uninstallSteps.push({
+          type: 'mcp',
+          description: `Remove ${entryText} from ${mcpResult.configPath} (${mcpResult.claudepointKeys.join(', ')})`,
+          action: () => removeMCPConfiguration(mcpResult.configPath, options.dryRun)
+        });
+      }
+      
+      // 2. Check hooks installation
+      const hooksResult = await checkHooksInstallation();
+      if (hooksResult.found) {
+        uninstallSteps.push({
+          type: 'hooks',
+          description: `Remove hooks from ${hooksResult.settingsPath}`,
+          action: () => removeHooksConfiguration(hooksResult.settingsPath, options.dryRun)
+        });
+      }
+      
+      // 3. Check slash commands
+      const commandsResult = await checkSlashCommands();
+      if (commandsResult.found) {
+        uninstallSteps.push({
+          type: 'commands',
+          description: `Remove slash commands from ${commandsResult.commandsDir}`,
+          action: () => removeSlashCommands(commandsResult.commandsDir, options.dryRun)
+        });
+      }
+      
+      // 4. Check local .claudepoint directories
+      if (options.deleteCheckpoints) {
+        const checkpointsResult = await checkLocalCheckpoints();
+        if (checkpointsResult.found) {
+          uninstallSteps.push({
+            type: 'checkpoints',
+            description: `Remove .claudepoint directory from ${checkpointsResult.path}`,
+            action: () => removeLocalCheckpoints(checkpointsResult.path, options.dryRun)
+          });
+        }
+      }
+      
+      if (uninstallSteps.length === 0) {
+        console.log(chalk.yellow('🤔 No ClaudePoint installations found to remove'));
+        console.log(chalk.gray('   ClaudePoint appears to be already uninstalled or never installed'));
+        return;
+      }
+      
+      // Show what will be uninstalled
+      console.log(chalk.red('Found the following ClaudePoint installations:'));
+      uninstallSteps.forEach((step, index) => {
+        const icon = step.type === 'mcp' ? '⚙️' : 
+                    step.type === 'hooks' ? '🧝' :
+                    step.type === 'commands' ? '📝' : '📁';
+        console.log(`  ${index + 1}. ${icon} ${step.description}`);
+      });
+      
+      if (!options.dryRun) {
+        console.log(chalk.red('\n⚠️ WARNING: This will completely remove ClaudePoint from your system'));
+        
+        const { confirmUninstall } = await inquirer.prompt([{
+          type: 'confirm',
+          name: 'confirmUninstall',
+          message: 'Are you sure you want to proceed with uninstallation?',
+          default: false
+        }]);
+        
+        if (!confirmUninstall) {
+          console.log(chalk.gray('\n❌ Uninstallation cancelled'));
+          return;
+        }
+      }
+      
+      // Perform uninstallation
+      console.log(chalk.red(`\n🗑️ ${options.dryRun ? 'Would remove' : 'Removing'} ClaudePoint...\n`));
+      
+      for (const step of uninstallSteps) {
+        const spinner = ora(`${options.dryRun ? 'Would remove' : 'Removing'} ${step.type}...`).start();
+        
+        try {
+          const result = await step.action();
+          if (result.success) {
+            spinner.succeed(`${step.type} ${options.dryRun ? 'would be removed' : 'removed'} successfully`);
+            if (result.details) {
+              console.log(chalk.gray(`   ${result.details}`));
+            }
+          } else {
+            spinner.warn(`${step.type} removal ${options.dryRun ? 'would fail' : 'failed'}: ${result.error}`);
+          }
+        } catch (error) {
+          spinner.fail(`Failed to remove ${step.type}: ${error.message}`);
+        }
+      }
+      
+      if (options.dryRun) {
+        console.log(chalk.yellow('\n🎆 DRY RUN COMPLETE - Nothing was actually removed'));
+        console.log(chalk.gray('   Run without --dry-run to perform actual uninstallation'));
+      } else {
+        console.log(chalk.green('\n✅ ClaudePoint uninstallation complete!'));
+        
+        if (!options.deleteCheckpoints) {
+          console.log(chalk.blue('\n📁 Note: Your .claudepoint directories and checkpoints were preserved'));
+        }
+        
+        console.log(chalk.yellow('\n🔄 Next steps:'));
+        console.log('  1. Restart Claude Code to fully remove hooks/MCP integration');
+        console.log('  2. Uninstall the npm package: npm uninstall -g claudepoint');
+        
+        if (options.deleteCheckpoints) {
+          console.log(chalk.red('\n⚠️ WARNING: Your checkpoints were deleted and cannot be recovered'));
+        }
+      }
+      
+    } catch (error) {
+      console.error(chalk.red('\n🚨 Uninstallation failed:'), error.message);
+      process.exit(1);
+    }
+  });
+
+// Helper functions for uninstallation
+async function checkMCPInstallation() {
+  const platform = os.platform();
+  let configPath;
+  
+  if (platform === 'darwin') {
+    configPath = path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+  } else if (platform === 'win32') {
+    configPath = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Claude', 'claude_desktop_config.json');
+  } else {
+    configPath = path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json');
+  }
+  
+  try {
+    const configData = await fsPromises.readFile(configPath, 'utf8');
+    const config = JSON.parse(configData);
+    
+    // Check for ANY claudepoint entries (claudepoint, claudepoint_1, etc.)
+    let found = false;
+    let claudepointKeys = [];
+    if (config.mcpServers) {
+      claudepointKeys = Object.keys(config.mcpServers).filter(key => 
+        key === 'claudepoint' || key.startsWith('claudepoint_')
+      );
+      found = claudepointKeys.length > 0;
+    }
+    
+    return { found, configPath, claudepointKeys };
+  } catch (error) {
+    return { found: false, configPath, claudepointKeys: [] };
+  }
+}
+
+async function removeMCPConfiguration(configPath, dryRun) {
+  if (dryRun) {
+    return { success: true, details: 'Would remove claudepoint from mcpServers' };
+  }
+  
+  try {
+    const configData = await fsPromises.readFile(configPath, 'utf8');
+    const config = JSON.parse(configData);
+    
+    // Remove ALL claudepoint entries (claudepoint, claudepoint_1, etc.)
+    if (config.mcpServers) {
+      const claudepointKeys = Object.keys(config.mcpServers).filter(key => 
+        key === 'claudepoint' || key.startsWith('claudepoint_')
+      );
+      
+      if (claudepointKeys.length > 0) {
+        claudepointKeys.forEach(key => {
+          delete config.mcpServers[key];
+        });
+        
+        // Remove mcpServers entirely if it's empty
+        if (Object.keys(config.mcpServers).length === 0) {
+          delete config.mcpServers;
+        }
+        
+        await fsPromises.writeFile(configPath, JSON.stringify(config, null, 2));
+        return { success: true, details: `Removed ${claudepointKeys.length} claudepoint MCP entries: ${claudepointKeys.join(', ')}` };
+      }
+    }
+    
+    return { success: true, details: 'No claudepoint MCP configuration found' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+async function checkHooksInstallation() {
+  const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+  
+  try {
+    const settingsData = await fsPromises.readFile(settingsPath, 'utf8');
+    const settings = JSON.parse(settingsData);
+    const found = settings.hooks?.PreToolUse && 
+                 Object.values(settings.hooks.PreToolUse).some(cmd => 
+                   typeof cmd === 'string' && cmd.includes('claudepoint-hook'));
+    return { found, settingsPath };
+  } catch (error) {
+    return { found: false, settingsPath };
+  }
+}
+
+async function removeHooksConfiguration(settingsPath, dryRun) {
+  if (dryRun) {
+    return { success: true, details: 'Would remove claudepoint hooks from PreToolUse' };
+  }
+  
+  try {
+    const settingsData = await fsPromises.readFile(settingsPath, 'utf8');
+    const settings = JSON.parse(settingsData);
+    
+    if (settings.hooks?.PreToolUse) {
+      // Remove all claudepoint hooks
+      Object.keys(settings.hooks.PreToolUse).forEach(tool => {
+        if (settings.hooks.PreToolUse[tool] && 
+            settings.hooks.PreToolUse[tool].includes('claudepoint-hook')) {
+          delete settings.hooks.PreToolUse[tool];
+        }
+      });
+      
+      // Clean up empty objects
+      if (Object.keys(settings.hooks.PreToolUse).length === 0) {
+        delete settings.hooks.PreToolUse;
+        if (Object.keys(settings.hooks).length === 0) {
+          delete settings.hooks;
+        }
+      }
+      
+      await fsPromises.writeFile(settingsPath, JSON.stringify(settings, null, 2));
+      return { success: true, details: 'Removed claudepoint hooks configuration' };
+    }
+    
+    return { success: true, details: 'No claudepoint hooks configuration found' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+async function checkSlashCommands() {
+  const commandsDir = path.join(process.cwd(), '.claude', 'commands');
+  
+  try {
+    const files = await fsPromises.readdir(commandsDir);
+    const claudepointFiles = files.filter(file => 
+      file.includes('claudepoint') || file.includes('undo.md') || file.includes('changes.md') || file.includes('ultrathink.md')
+    );
+    return { found: claudepointFiles.length > 0, commandsDir, files: claudepointFiles };
+  } catch (error) {
+    return { found: false, commandsDir, files: [] };
+  }
+}
+
+async function removeSlashCommands(commandsDir, dryRun) {
+  if (dryRun) {
+    return { success: true, details: 'Would remove claudepoint slash command files' };
+  }
+  
+  try {
+    const files = await fsPromises.readdir(commandsDir);
+    const claudepointFiles = files.filter(file => 
+      file.includes('claudepoint') || file.includes('undo.md') || file.includes('changes.md') || file.includes('ultrathink.md')
+    );
+    
+    let removedCount = 0;
+    for (const file of claudepointFiles) {
+      await fsPromises.unlink(path.join(commandsDir, file));
+      removedCount++;
+    }
+    
+    return { success: true, details: `Removed ${removedCount} slash command files` };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+async function checkLocalCheckpoints() {
+  const checkpointDir = path.join(process.cwd(), '.claudepoint');
+  
+  try {
+    await fsPromises.access(checkpointDir);
+    const stats = await fsPromises.stat(checkpointDir);
+    return { found: stats.isDirectory(), path: checkpointDir };
+  } catch (error) {
+    return { found: false, path: checkpointDir };
+  }
+}
+
+async function removeLocalCheckpoints(checkpointPath, dryRun) {
+  if (dryRun) {
+    return { success: true, details: 'Would remove .claudepoint directory and all checkpoints' };
+  }
+  
+  try {
+    await fsPromises.rm(checkpointPath, { recursive: true, force: true });
+    return { success: true, details: 'Removed .claudepoint directory and all checkpoints' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
 
 program.parse();

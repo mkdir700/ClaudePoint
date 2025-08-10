@@ -1,444 +1,270 @@
-# ClaudePoint MCP🎯
+# ClaudePoint 🚀
 
-**The safest way to 'vive code' with Claude Code.** Create instant checkpoints of your codebase, experiment fearlessly, and restore instantly if things go wrong.
+**The ultimate hacking companion for Claude Code.** Deploy claudepoints, experiment fearlessly, time travel instantly.
 
 [![npm version](https://badge.fury.io/js/claudepoint.svg)](https://badge.fury.io/js/claudepoint)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js 18+](https://img.shields.io/badge/node-18+-blue.svg)](https://nodejs.org/downloads/)
 
-> *"The undo button your codebase deserves"*
+> *"Like having a time machine for your code - deploy, experiment, undo like a digital wizard"* 🕰️⚡
 
-## ✨ Features
+## What's this?
 
-- 🚀 **Global NPM package** - Install once, use everywhere
-- 🤖 **Claude Code & Desktop integration** - Direct MCP support
-- 📋 **Development history & changelog** - Track all activities with automatic logging
-- 📝 **Custom changelog entries** - Claude Code can document its own changes
-- 📦 **Smart compression** - Efficient tar.gz storage
-- 🔍 **Gitignore aware** - Respects your .gitignore patterns
-- 🛡️ **Safe restoration** - Auto-backup before every restore
-- 🧹 **Auto cleanup** - Configurable checkpoint limits
-- ⚡ **Fast operations** - Optimized for development workflows
-- 🪝 **Claude Code Hooks** - Automatic safety checkpoints before major operations
-- 💾 **Incremental Checkpoints** - Smart storage that saves only file changes
+Ever had that moment when Claude is about to hack your entire codebase and you think "this could either be genius or catastrophic"? That's when you need ClaudePoint.
 
-## 💾 Incremental Checkpoints (NEW!)
+**Dead simple** - lock in your digital DNA, let Claude break things beautifully, and if the matrix glitches, restore instantly. No git gymnastics, no complexity, just pure hacking power.
 
-ClaudePoint now uses **incremental checkpoints by default**, dramatically reducing storage usage while maintaining full restoration capabilities.
-
-### How It Works
-- **First checkpoint**: Always creates a full snapshot
-- **Subsequent checkpoints**: Only store changed files (added/modified/deleted)
-- **Automatic detection**: ClaudePoint decides when to create full vs incremental checkpoints
-- **Chain reconstruction**: Seamlessly rebuilds your project state from checkpoint chains
-
-### Storage Savings
-```
-Traditional (Full) Checkpoints:
-- Every checkpoint: 10MB project = 10MB storage
-- 10 checkpoints = 100MB storage ❌
-
-Incremental Checkpoints:
-- First checkpoint: 10MB (full)
-- Next 9 checkpoints: ~100KB each (only changes)
-- 10 checkpoints = ~11MB storage ✅ (89% savings!)
-```
-
-### Visual Checkpoint Chain
-```bash
-claudepoint list --show-chain
-```
-```
-📋 Available checkpoints (4):
-  └─ 1. feature_complete_2025-01-15 [INC]
-  └─    Feature implementation complete
-  └─    1/15/2025 | 156 files | 2.1MB | 3 changes
-  └─    ↳ based on: refactor_auth_2025-01-15
-
-  ├─ 2. refactor_auth_2025-01-15 [INC]
-  ├─    Refactored authentication
-  ├─    1/15/2025 | 155 files | 2.1MB | 12 changes
-  ├─    ↳ based on: initial_setup_2025-01-15
-
-  3. initial_setup_2025-01-15 [FULL]
-     Initial project setup
-     1/15/2025 | 150 files | 2.0MB
-```
-
-### CLI Options
-```bash
-# Force a full checkpoint (useful for major milestones)
-claudepoint create --full --description "Version 1.0 release"
-
-# Normal usage (automatic incremental)
-claudepoint create --description "Fixed login bug"
-
-# View checkpoint relationships
-claudepoint list --show-chain
-```
-
-### Configuration
-Incremental checkpoints are enabled by default. You can customize in `.checkpoints/config.json`:
-```json
-{
-  "incremental": {
-    "enabled": true,                    // Enable/disable incremental mode
-    "fullSnapshotInterval": 5,          // Create full snapshot every N checkpoints
-    "maxChainLength": 20                // Maximum chain before forcing full snapshot
-  }
-}
-```
-
-## 🪝 Automatic Safety with Hooks (NEW!)
-
-ClaudePoint integrates with Claude Code hooks to automatically create safety checkpoints before potentially destructive operations:
-
-### Quick Setup
-```bash
-# Initialize hooks (creates local config + installs to Claude Code)
-claudepoint init-hooks --install
-
-# Check status and manage triggers
-claudepoint hooks status
-claudepoint hooks configure  # Interactive wizard
-```
-
-### Available Triggers
-- **`before_bulk_edit`** - Safety checkpoint before MultiEdit operations (enabled by default)
-- **`before_major_write`** - Safety checkpoint before Write operations (disabled by default)
-- **`before_bash_commands`** - Safety checkpoint before Bash commands (disabled by default)
-- **`before_file_operations`** - Safety checkpoint before any file changes (disabled by default)
-
-### Management Commands
-```bash
-claudepoint hooks status                    # Show configuration and installation status
-claudepoint hooks enable before_bash_commands   # Enable specific trigger
-claudepoint hooks set-changelog true            # Enable automatic changelog entries
-claudepoint hooks configure                     # Interactive configuration wizard
-```
-
-**Benefits**: Automatic safety without disrupting your workflow - hooks create checkpoints invisibly in the background before major changes!
-
-## 🚀 Quick Start
-
-### 1. Install ClaudePoint globally
+## Quick Start (literally 30 seconds) ⚡
 
 ```bash
+# Install globally
 npm install -g claudepoint
-```
 
-### 2. Initialize your project (ESSENTIAL FIRST STEP!)
+# Navigate to your project
+cd your-awesome-project
 
-```bash
-# In your project directory - run this FIRST!
-claudepoint setup
-```
-
-> **🚨 IMPORTANT**: Always run `claudepoint setup` as your first step in any new project to enable all ClaudePoint features including hooks and incremental checkpoints.
-
-The **interactive setup wizard** will configure everything you need:
-- ✅ Add .checkpoints to .gitignore? (Yes/No)
-- ✅ Create initial checkpoint? (Yes/No) 
-- ✅ Install Claude Code slash commands? (Yes/No)
-- ✅ **Enable automatic safety hooks?** (Yes/No) ⭐ NEW!
-  - Choose which triggers to enable (bash, file operations, etc.)
-  - Configure auto-changelog for development history
-- ✅ **Configure incremental checkpoints** (enabled by default) ⭐ NEW!
-
-**What setup creates:**
-- `.checkpoints/` directory with configuration
-- Initial full checkpoint of your project
-- Hook integration with Claude Code (if selected)
-- Slash commands for faster workflow
-
-For non-interactive setup: `claudepoint setup --no-interactive`
-
-### 3. Configure Claude Code or Claude Desktop (Optional but Recommended)
-
-#### For Claude Code (Command Line):
-```bash
-claude mcp add claudepoint claudepoint
-```
-
-#### For Claude Desktop (GUI Application):
-Add to your Claude Desktop configuration file:
-
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "claudepoint": {
-      "command": "claudepoint",
-      "args": []
-    }
-  }
-}
-```
-
-> **Note:** This basic configuration works for most users. Only configure the environment variable below if you need multi-project support or are experiencing working directory issues.
-
-### 4. Let Claude manage checkpoints
-
-**In any Claude Code or Claude Desktop conversation:**
-
-- "Create a checkpoint before refactoring"
-- "Show me our development history"
-- "List all my checkpoints"
-- "Restore the checkpoint from before the auth changes"
-- "Log what you just changed"
-
-Claude will automatically use ClaudePoint tools!
-
-## 🤖 How to Instruct Claude
-
-Once configured, you can naturally tell Claude:
-
-### **Using Slash Commands (Fastest!):**
-```
-/create-checkpoint working-auth Everything works perfectly here
-/list-checkpoints
-/restore-checkpoint
-/checkpoint-status
-```
-
-### **Project Setup:**
-```
-"Setup checkpoints for this project and show me what we've worked on before"
-```
-
-### **Before making changes:**
-```
-"Create a checkpoint before you start - call it 'before auth refactor'"
-```
-
-### **During development:**
-```
-"Now refactor the authentication to use OAuth, and log what you're doing"
-```
-
-### **After changes:**
-```
-"Document that you just added the OAuth integration with detailed changelog entry"
-```
-
-### **Session context:**
-```
-"What checkpoints do we have and what was the last thing we were working on?"
-```
-
-### **Recovery:**
-```
-"Something went wrong, restore the last working checkpoint"
-```
-
-### **Development timeline:**
-```
-"Show me our complete development history across all sessions"
-```
-
-Claude will handle all operations automatically using the MCP tools!
-
-## 🔧 Manual CLI Usage
-
-You can also use ClaudePoint directly:
-
-```bash
-# Setup in any project
-cd your-project
+# One-command setup (MCP + Hooks + Commands)
 claudepoint setup
 
-# Create checkpoint
-claudepoint create --description "Before major refactor"
+# 🚨 IMPORTANT: If you chose global/user scope, run this:
+claude mcp add-from-claude-desktop
 
-# List checkpoints
+# You're now equipped to hack fearlessly 🕶️
+```
+
+**That's it!** ClaudePoint now works automatically:
+- ✅ Creates checkpoints before bulk edits
+- ✅ MCP server configured
+- ✅ Slash commands installed
+- ✅ Ready to use in Claude Code
+
+> **⚠️ Note**: If MCP tools don't appear, make sure you ran `claude mcp add-from-claude-desktop` in your project directory after setup!
+
+## Command Arsenal 🎮
+
+### The Hacker Way
+Just tell Claude: "deploy a claudepoint before you start" or "undo to the last claudepoint". The matrix responds instantly.
+
+### Manual Matrix Control
+```bash
+claudepoint                           # Deploy claudepoint (default action!)
+claudepoint undo                      # Instant time hack to last claudepoint
+claudepoint changes                   # Scan code matrix for modifications  
+claudepoint list                      # Browse your claudepoint vault
+claudepoint restore awesome-feature   # Time travel to specific claudepoint
+claudepoint config                    # Enter configuration mode
+```
+
+## Spectacular Features 🎆
+
+**🕰️ Instant Time Travel** - One command `undo` and you're back to your last stable reality. No questions asked.
+
+**🔍 Change Scanner** - See exactly what files Claude modified since your last claudepoint. Perfect for reviewing AI changes.
+
+**💾 Full Reality Snapshots** - Every claudepoint captures your complete digital universe. No partial saves, no broken dimensions.
+
+**🪝 Auto-Deploy Before Chaos** - Hooks automatically create safety nets before Claude attempts bulk edits. Intelligent anti-spam protection prevents checkpoint flooding (30-second cooldown).
+
+**📊 Adventure Timeline** - Track your coding journey. "What epic changes did we make yesterday?"
+
+**🧹 Smart Cleanup Matrix** - Automatically manages your claudepoint collection by age and count. Set it, forget it, stay organized.
+
+## Real World Matrix Hacking 🌐
+
+```bash
+# Before that insane refactor
+claudepoint # Deploy instant safety net
+
+# After Claude "optimized" everything and reality collapsed  
+claudepoint undo # Back to stable dimension
+
+# Scan what changed in this coding session
+claudepoint changes
+
+# Browse your vault of digital artifacts
 claudepoint list
 
-# View development history
+# Check your adventure timeline
 claudepoint changelog
-
-# Add custom changelog entry
-claudepoint log "Fixed authentication bug" --details "Resolved OAuth token expiration issue" --type "BUG_FIX"
-
-# Restore checkpoint
-claudepoint restore "before-major" --dry-run
-claudepoint restore "before-major"
-
-# Initialize slash commands for Claude Code
-claudepoint init-commands
 ```
 
-## 🚀 Slash Commands (NEW!)
+## Configuration Matrix ⚙️
 
-ClaudePoint now supports Claude Code slash commands for faster operations! These commands appear in Claude Code when you type `/`.
-
-### Setup Slash Commands
-
-```bash
-# During initial setup
-claudepoint setup
-
-# Or add to existing project
-claudepoint init-commands
-```
-
-### Available Slash Commands
-
-- **`/create-checkpoint`** - Create a checkpoint with optional name and description
-  - Example: `/create-checkpoint auth-working Authentication system complete`
-  
-- **`/restore-checkpoint`** - Interactive checkpoint restoration
-  - Shows numbered list of checkpoints
-  - Waits for your selection (by number or name)
-  
-- **`/list-checkpoints`** - Quick view of all checkpoints
-  
-- **`/checkpoint-status`** - Current status and recent activity
-
-### How It Works
-
-The slash commands are simple markdown files in `.claude/commands/` that guide Claude to use the appropriate ClaudePoint MCP tools. You can customize them after generation to fit your workflow!
-
-## 🛠️ MCP Tools (For Claude)
-
-When Claude has ClaudePoint configured, it can use:
-
-- **`setup_claudepoint`** - Initialize checkpoints in current project
-- **`create_checkpoint`** - Create new checkpoint with name/description
-- **`list_checkpoints`** - Show all available checkpoints
-- **`restore_checkpoint`** - Restore previous state (with emergency backup)
-- **`get_changelog`** - View development history and session activities
-- **`set_changelog`** - Add custom entries to development history
-- **`init_slash_commands`** - Initialize Claude Code slash commands for the project
-
-## 📋 Development History & Session Continuity
-
-ClaudePoint automatically tracks all your development activities and enables Claude to document its own work:
-
-### **What Gets Tracked Automatically:**
-- ✅ **Project setup** - When ClaudePoint was initialized
-- ✅ **Checkpoint creation** - Every checkpoint with description
-- ✅ **Checkpoint restoration** - When you rolled back changes
-- ✅ **Emergency backups** - Auto-backups before restores
-
-### **What Claude Can Log:**
-- ✅ **Code changes** - "Refactored authentication system"
-- ✅ **Bug fixes** - "Fixed memory leak in user sessions"
-- ✅ **Feature additions** - "Added real-time chat functionality"
-- ✅ **Optimizations** - "Improved API response times by 40%"
-
-### **Example Development Timeline:**
-```
-📋 Development History:
-1. SETUP - ClaudePoint initialized in project
-2. CREATE_CHECKPOINT - Created checkpoint: initial_setup
-3. REFACTOR - Refactored authentication system to use OAuth
-4. CREATE_CHECKPOINT - Created checkpoint: oauth_implementation  
-5. BUG_FIX - Fixed memory leak in user session handling
-6. ADD_FEATURE - Added real-time chat functionality
-7. RESTORE_CHECKPOINT - Restored checkpoint: oauth_implementation
-```
-
-### **Claude Integration Benefits:**
-```
-You: "What have we been working on?"
-Claude: Uses get_changelog → Shows complete development timeline
-
-You: "Refactor the auth system and document what you're doing"
-Claude: 
-1. Uses create_checkpoint → Saves current state
-2. Makes the changes
-3. Uses set_changelog → Documents "Refactored authentication to use OAuth"
-```
-
-
-## 🛡️ Safety & Storage
-
-### What Gets Saved
-- ✅ Respects .gitignore patterns
-- ✅ Smart compression with tar.gz
-- ✅ Incremental storage (only changes)
-- ✅ Development history & metadata
-- ✅ Auto-cleanup of old checkpoints
-
-### Safety Features
-- **Emergency Backup**: Auto-backup before every restore
-- **Dry Run Mode**: Preview changes with `--dry-run`
-- **Smart Matching**: Use partial checkpoint names
-- **Session Memory**: Complete development timeline
-
-## ⚙️ Configuration
-
-Auto-created `.checkpoints/config.json`:
+ClaudePoint creates `.claudepoint/config.json` with perfect defaults:
 
 ```json
 {
-  "maxCheckpoints": 10,
-  "autoName": true,
-  "ignorePatterns": [
-    ".git", ".checkpoints", "node_modules", ".env", ".env.*",
-    "*.log", ".DS_Store", "Thumbs.db", "__pycache__", "*.pyc",
-    ".vscode", ".idea", "dist", "build", "coverage", ".nyc_output",
-    ".next", ".nuxt", ".cache", "tmp", "temp"
-  ],
-  "additionalIgnores": ["my-custom-dir"],
-  "nameTemplate": "checkpoint_{timestamp}"
+  "maxCheckpoints": 10,        // Maintain 10 reality snapshots
+  "maxAge": 30,               // Delete ancient claudepoints (0 = eternal)
+  "autoName": true,           // Auto-generate epic names
+  "ignorePatterns": [         // Exclude from the matrix
+    "node_modules", ".git", ".env", "*.log", 
+    ".DS_Store", "dist", "build", ".next", ".claudepoint"
+  ]
 }
 ```
 
+**Checkpoint Management:**
+- Preserves your 10 most recent claudepoints
+- Archives anything older than 30 days  
+- Runs cleanup automatically after each deployment
+- Fully customizable for your workflow
 
-## 🔧 Troubleshooting
+## Claude Code Integration 🤖
 
-See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed solutions.
+**Automatic Setup:**
+```bash
+claudepoint setup
+# Handles everything: MCP server, hooks, and commands
 
-**Quick fixes:**
-- **Installation issues**: `npm cache clean --force && npm install -g claudepoint`
-- **Command not found**: Check PATH with `npm config get prefix`
-- **Wrong directory**: Set `CLAUDEPOINT_PROJECT_DIR` in config
-- **Windows issues**: Use absolute paths in config
+# 🚨 CRITICAL: If you chose global/user scope, run this in your project:
+claude mcp add-from-claude-desktop
+```
 
+**Scope Options:**
+- `claudepoint setup` - Project scope (default)
+- `claudepoint setup --scope user` - User scope (all projects)
+- `claudepoint setup --scope global` - System-wide
 
-## 📊 Why ClaudePoint?
+**What it configures:**
+1. ⚙️ MCP server for ClaudePoint tools
+2. 🪝 Hooks for automatic checkpoints (with intelligent anti-spam)
+3. 📝 Slash commands for quick access
+4. 💾 Initial checkpoint of your project
 
-| Feature | ClaudePoint | Git Commits | File Copies |
-|---------|------------|-------------|-------------|
-| **Setup Time** | 30 seconds | Minutes | Manual |
-| **Claude Integration** | ✅ Native | ❌ | ❌ |
-| **Auto Documentation** | ✅ With AI | ❌ | ❌ |
-| **Session Continuity** | ✅ Complete | ❌ | ❌ |
-| **Emergency Backup** | ✅ Always | ❌ | ❌ |
-| **Fast Restore** | ✅ Instant | ❌ Complex | ❌ Manual |
-| **Space Efficient** | ✅ Compressed | ✅ | ❌ |
-| **Development Timeline** | ✅ Rich History | ❌ Basic | ❌ |
+## Pro Hacker Tips 🕶️
 
+1. **Hooks are your safety net** - Enable during setup. They'll save you when Claude gets too creative.
+2. **Anti-spam protection** - Automatic checkpoints won't spam (30-second cooldown). Manual checkpoints always work.
+3. **Name your reality snapshots** - "auth-working" beats "claudepoint_2024_12_15_143022"  
+4. **Review the timeline** - `claudepoint changelog` shows your coding adventure history
+5. **Tune the matrix** - `claudepoint config` shows all your settings at a glance
+6. **Scan before deploying** - `claudepoint changes` shows what Claude modified
 
-## 📚 Documentation
+## Command Reference 🎯
 
-- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Detailed troubleshooting guide
-- [ADVANCED.md](ADVANCED.md) - Advanced usage, patterns, and configuration
-- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
+```bash
+# Setup (once per project)
+claudepoint setup                     # Complete setup with interactive prompts
+claudepoint setup --scope user        # Setup for all your projects
+claudepoint setup --scope global      # System-wide setup
+claudepoint setup --force             # Reinstall even if configured
 
-## 🤝 Contributing
+# Create checkpoints  
+claudepoint                           # Quick deploy (default action)
+claudepoint create -d "epic feature"  # Deploy with description
+claudepoint create -n "v2.0"         # Deploy with custom name
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+# Time travel
+claudepoint undo                      # Instant restore to last checkpoint  
+claudepoint restore v2.0              # Restore specific checkpoint
 
-## 🐛 Issues & Support
+# Inspect changes
+claudepoint changes                   # What changed since last checkpoint
+claudepoint list                      # Browse all checkpoints
+claudepoint changelog                 # View development history
 
-- 🐛 **Bug reports**: [GitHub Issues](https://github.com/Andycufari/ClaudePoint/issues)
-- 💡 **Feature requests**: [GitHub Issues](https://github.com/Andycufari/ClaudePoint/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/Andycufari/ClaudePoint/discussions)
+# Configuration
+claudepoint config                    # View current configuration
+claudepoint hooks status              # Check hooks integration status
 
-## ⭐ Show Your Support
+# Maintenance
+claudepoint uninstall                 # Remove ClaudePoint from system
+claudepoint check-mcp                 # Debug MCP configuration
+```
 
-If ClaudePoint saves your code (and sanity), give it a star! ⭐
+## Available Tools & Commands 🛠️
 
-## 📄 License
+**Slash Commands (type / in Claude Code):**
+- `/claudepoint` - Create a checkpoint
+- `/undo` - Quick restore to last checkpoint
+- `/claudepoint-list` - Browse your checkpoints
+- `/claudepoint-restore` - Restore specific checkpoint
+- `/changes` - See what changed
+- `/claudepoint-changelog` - View history
+- `/ultrathink` - Activate deep reasoning
 
-MIT License - Use it however you want!
+**MCP Tools (automatic via hooks):**
+- `create_claudepoint` - Deploy new checkpoint
+- `undo_claudepoint` - Instant restore  
+- `list_claudepoints` - Browse collection
+- `restore_claudepoint` - Time travel
+- `get_changes` - Scan modifications
+
+## Troubleshooting the Matrix 🔧
+
+**"Command not found"** - Add npm global to your PATH:
+```bash
+export PATH="$PATH:$(npm config get prefix)/bin"
+```
+
+**MCP tools not appearing in Claude Code?**
+1. **🚨 MOST COMMON**: Run `claude mcp add-from-claude-desktop` in your project directory
+2. Restart Claude Code completely
+3. Check that setup completed without errors
+
+**Hooks not responding?** 
+1. Run `claudepoint hooks status` to check integration
+2. Restart Claude Code after setup
+3. Ensure you ran `claudepoint setup` in your project
+4. Check `.claudepoint/hooks.log` for detailed debugging
+
+**Claudepoints consuming too much space?** - Add more patterns to `ignorePatterns` in your config matrix
+
+## ClaudePoint vs Git: The Matrix Comparison 📊
+
+| Aspect | ClaudePoint | Git Commits |
+|--------|-------------|-------------|
+| **Setup Speed** | 30 seconds ⚡ | Several minutes ⏱️ |
+| **Complexity** | Hacker-simple 🎯 | Learning curve 📚 |
+| **Claude Integration** | ✅ Native matrix powers | ❌ Manual gymnastics |
+| **Auto-Safety** | ✅ Before risky changes | ❌ Manual vigilance |
+| **Time Travel** | ✅ One command | ❌ Multiple incantations |
+| **Reality Snapshots** | ✅ Complete universe | ❌ Partial diffs |
+| **Undo Experience** | ✅ `claudepoint undo` | ❌ `git reset --hard` gymnastics |
+
+**The Truth**: ClaudePoint complements Git perfectly. Use Git for version history, ClaudePoint for experimental safety nets!
+
+## Advanced Matrix Hacking 🌟
+
+**Multi-Project Matrix:** ClaudePoint operates per-project. Global hooks automatically detect the correct vault.
+
+**Custom Ignore Patterns:**
+```json
+{
+  "additionalIgnores": ["secret-files", "*.backup"],
+  "ignorePatterns": ["node_modules"]  // Complete override
+}
+```
+
+**Matrix Cleanup Tuning:**
+```json
+{
+  "maxCheckpoints": 25,  // More reality snapshots
+  "maxAge": 7           // Weekly archive cycle
+}
+```
+
+**Force Include Critical Files:**
+```json
+{
+  "forceInclude": ["important-config.*", ".env.example"]
+}
+```
+
+## Contributing to the Matrix 🤝
+
+Pull requests welcome. Keep it simple. Make it spectacular. Break things beautifully.
+
+## Support the Mission ⭐
+
+Star it on [GitHub](https://github.com/Andycufari/ClaudePoint) if ClaudePoint saved your digital bacon 🥓
+
+Join the hacker revolution - make AI experimentation fearless!
 
 ---
 
-**Made with ❤️ for the Claude Code community**
+**Crafted by [@Andycufari](https://x.com/andycufari) - a vibe coder who learned that even digital wizards need an undo button** 🕶️
 
-Follow [@Andycufari](https://x.com/andycufari) for more dev tools!
+*For developers who hack reality with AI and need that safety net when experimenting in the code matrix* 🚀✨
+
+**ClaudePoint: Where fearless experimentation meets instant time travel** ⚡🕰️
