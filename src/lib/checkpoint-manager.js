@@ -15,7 +15,7 @@ class CheckpointManager {
     this.configFile = path.join(this.checkpointDir, 'config.json');
     this.changelogFile = path.join(this.checkpointDir, 'changelog.json');
     this.hooksConfigFile = path.join(this.checkpointDir, 'hooks.json');
-    
+
     // 🕶️ Hacker vibes - cool messages for the coding experience
     this.successMessages = [
       '🚀 CLAUDEPOINT LOCKED IN // Ready to hack the impossible',
@@ -25,7 +25,7 @@ class CheckpointManager {
       '💾 DATA FORTRESS SECURED // Your coding session is immortalized',
       '🌟 QUANTUM STATE LOCKED // Ready for interdimensional debugging'
     ];
-    
+
     this.undoMessages = [
       '🔄 INITIATING TIME HACK // Rolling back through digital history',
       '⏪ REALITY GLITCH DETECTED // Reverting to last stable dimension',
@@ -33,14 +33,14 @@ class CheckpointManager {
       '🚨 EMERGENCY ROLLBACK // Houston, we\'re going back in time',
       '✨ CTRL+Z OVERDRIVE // Undoing like a digital wizard'
     ];
-    
+
     this.listMessages = [
       '📡 ACCESSING CODE VAULT // Your collection of digital artifacts',
       '🗂️ BROWSING CHECKPOINT ARCHIVE // Each one a moment of genius',
       '🎮 LOADING SAVE FILES // Your coding adventure continues',
       '🔍 SCANNING CLAUDEPOINT DATABASE // Beep boop beep...'
     ];
-    
+
     this.configMessages = [
       '⚙️ ENTERING CONFIGURATION MODE // Time to tune your hacking rig',
       '🎛️ ADJUSTING SETTINGS // Making claudepoint work just right',
@@ -48,7 +48,7 @@ class CheckpointManager {
       '🎚️ FINE-TUNING PARAMETERS // Your checkpoint setup, perfected'
     ];
   }
-  
+
   getRandomMessage(messageArray) {
     return messageArray[Math.floor(Math.random() * messageArray.length)];
   }
@@ -137,7 +137,7 @@ class CheckpointManager {
     const relativePath = path.relative(this.projectRoot, filePath);
     const config = await this.loadConfig();
     const ig = ignore();
-    
+
     // Use user-defined ignores if provided, otherwise use defaults + additional
     let ignorePatterns;
     if (config.ignores && Array.isArray(config.ignores)) {
@@ -145,10 +145,10 @@ class CheckpointManager {
     } else {
       ignorePatterns = [...config.ignorePatterns, ...config.additionalIgnores];
     }
-    
+
     // Add ignore patterns
     ig.add(ignorePatterns);
-    
+
     // Add .gitignore patterns if file exists
     try {
       const gitignorePath = path.join(this.projectRoot, '.gitignore');
@@ -157,10 +157,10 @@ class CheckpointManager {
     } catch (error) {
       // No gitignore file, continue
     }
-    
+
     // Check if file should be ignored
     const shouldIgnore = ig.ignores(relativePath);
-    
+
     // Check forceInclude patterns (these override ignores)
     if (shouldIgnore && config.forceInclude && Array.isArray(config.forceInclude)) {
       const forceIg = ignore();
@@ -169,7 +169,7 @@ class CheckpointManager {
         return false; // Force include this file
       }
     }
-    
+
     return shouldIgnore;
   }
 
@@ -188,16 +188,16 @@ class CheckpointManager {
     const startTime = Date.now();
     let dirCount = 0;
     let fileCount = 0;
-    
+
     // Safety check - don't scan home directory
     if (this.projectRoot === process.env.HOME || this.projectRoot === os.homedir()) {
       console.error(`[claudepoint] WARNING: Refusing to scan home directory: ${this.projectRoot}`);
       console.error(`[claudepoint] Use claudepoint in a specific project directory`);
       return [];
     }
-    
+
     console.error(`[claudepoint] Scanning project files from: ${this.projectRoot}`);
-    
+
     async function walkDir(dir) {
       try {
         dirCount++;
@@ -205,12 +205,12 @@ class CheckpointManager {
           console.error(`[claudepoint] WARNING: Scanned over 1000 directories, stopping`);
           return;
         }
-        
+
         const entries = await fsPromises.readdir(dir, { withFileTypes: true });
-        
+
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name);
-          
+
           if (entry.isDirectory()) {
             if (!(await this.shouldIgnore(fullPath))) {
               await walkDir.call(this, fullPath);
@@ -228,11 +228,11 @@ class CheckpointManager {
     }
 
     await walkDir.call(this, this.projectRoot);
-    
+
     const elapsed = Date.now() - startTime;
     console.error(`[claudepoint] File scan complete: ${files.length} files in ${elapsed}ms`);
     console.error(`[claudepoint] Scanned ${dirCount} directories`);
-    
+
     return files.sort();
   }
 
@@ -248,14 +248,14 @@ class CheckpointManager {
 
   async calculateFileHashes(files) {
     const hashes = new Map();
-    
+
     for (const file of files) {
       const hash = await this.calculateFileHash(file);
       if (hash) {
         hashes.set(file, hash);
       }
     }
-    
+
     return hashes;
   }
 
@@ -264,7 +264,7 @@ class CheckpointManager {
       const manifestPath = path.join(this.snapshotsDir, checkpointName, 'manifest.json');
       const manifestData = await fsPromises.readFile(manifestPath, 'utf8');
       const manifest = JSON.parse(manifestData);
-      
+
       // Return hashes if available (new format), otherwise empty map for backward compatibility
       return new Map(Object.entries(manifest.fileHashes || {}));
     } catch (error) {
@@ -274,17 +274,17 @@ class CheckpointManager {
 
   async calculateChanges(currentFiles, lastCheckpointName) {
     const changes = { added: [], modified: [], deleted: [] };
-    
+
     if (!lastCheckpointName) {
       // First checkpoint - all files are added
       changes.added = [...currentFiles];
       return changes;
     }
-    
+
     // Get file hashes from last checkpoint
     const lastHashes = await this.getCheckpointHashes(lastCheckpointName);
     const currentHashes = await this.calculateFileHashes(currentFiles);
-    
+
     // Find changes
     for (const [file, hash] of currentHashes) {
       if (!lastHashes.has(file)) {
@@ -293,14 +293,14 @@ class CheckpointManager {
         changes.modified.push(file);
       }
     }
-    
+
     // Find deletions
     for (const file of lastHashes.keys()) {
       if (!currentHashes.has(file)) {
         changes.deleted.push(file);
       }
     }
-    
+
     return changes;
   }
 
@@ -316,11 +316,11 @@ class CheckpointManager {
 
   generateCheckpointName(customName, description) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    
+
     if (customName) {
       return `${customName}_${timestamp}`;
     }
-    
+
     if (description) {
       const cleanDesc = description.toLowerCase()
         .replace(/[^a-z0-9\s]/g, '')
@@ -328,21 +328,21 @@ class CheckpointManager {
         .slice(0, 30);
       return `${cleanDesc}_${timestamp}`;
     }
-    
+
     return `checkpoint_${timestamp}`;
   }
 
   async setup(options = {}) {
     try {
       await this.ensureDirectories();
-      
+
       // Setup gitignore if requested (default true for backward compatibility)
       const updateGitignore = options.updateGitignore !== false;
-      
+
       if (updateGitignore) {
         const gitignorePath = path.join(this.projectRoot, '.gitignore');
         const gitignoreEntry = '.claudepoint/';
-        
+
         try {
           let gitignoreContent = '';
           try {
@@ -350,9 +350,9 @@ class CheckpointManager {
           } catch (error) {
             // File doesn't exist, will create new one
           }
-          
+
           if (!gitignoreContent.includes(gitignoreEntry)) {
-            const newContent = gitignoreContent + 
+            const newContent = gitignoreContent +
               (gitignoreContent && !gitignoreContent.endsWith('\n') ? '\n' : '') +
               '\n# ClaudePoint checkpoint system\n' + gitignoreEntry + '\n';
             await fsPromises.writeFile(gitignorePath, newContent);
@@ -361,14 +361,14 @@ class CheckpointManager {
           // Could not update .gitignore, continue
         }
       }
-      
+
       // Create initial config
       await this.loadConfig();
-      
+
       // Create initial checkpoint if requested and files exist
       const createInitial = options.createInitial !== false;
       let initialCheckpoint = null;
-      
+
       if (createInitial) {
         const files = await this.getProjectFiles();
         if (files.length > 0) {
@@ -379,7 +379,7 @@ class CheckpointManager {
           }
         }
       }
-      
+
       return {
         success: true,
         initialCheckpoint,
@@ -397,7 +397,7 @@ class CheckpointManager {
     try {
       await this.ensureDirectories();
       const files = await this.getProjectFiles();
-      
+
       if (files.length === 0) {
         return {
           success: false,
@@ -408,14 +408,14 @@ class CheckpointManager {
       // Get checkpoints for comparison
       const checkpoints = await this.getCheckpoints();
       const lastCheckpoint = checkpoints.length > 0 ? checkpoints[0] : null;
-      
+
       // Anti-spam protection: prevent multiple checkpoints within 30 seconds
       // unless explicitly forced or manually created (has custom name)
       if (!forceCreate && !name && lastCheckpoint) {
         const lastCheckpointTime = new Date(lastCheckpoint.timestamp);
         const now = new Date();
         const timeDiff = (now - lastCheckpointTime) / 1000; // seconds
-        
+
         if (timeDiff < 30) {
           console.error(`[claudepoint] Skipping checkpoint - created too recently (${Math.round(timeDiff)}s ago)`);
           return {
@@ -425,14 +425,14 @@ class CheckpointManager {
           };
         }
       }
-      
+
       // For change detection, compare against the most recent checkpoint
       // For incremental storage, we'll determine the base checkpoint separately
       const changes = await this.calculateChanges(files, lastCheckpoint?.name);
-      
+
       // Check if there are any actual changes for incremental checkpoints
       const hasChanges = changes.added.length > 0 || changes.modified.length > 0 || changes.deleted.length > 0;
-      
+
       if (!forceCreate && !hasChanges && lastCheckpoint) {
         return {
           success: false,
@@ -440,17 +440,17 @@ class CheckpointManager {
           noChanges: true
         };
       }
-      
+
       // Always create full checkpoints now
       const checkpointType = 'FULL';
-      
+
       const checkpointName = this.generateCheckpointName(name, description);
       const checkpointPath = path.join(this.snapshotsDir, checkpointName);
       await fsPromises.mkdir(checkpointPath, { recursive: true });
 
       // Calculate file hashes for the manifest
       const fileHashes = await this.calculateFileHashes(files);
-      
+
       // Calculate total size
       let totalSize = 0;
       for (const file of files) {
@@ -492,11 +492,11 @@ class CheckpointManager {
 
       // Cleanup old checkpoints
       await this.cleanupOldCheckpoints();
-      
+
       // Log to changelog
       const logMessage = `Created ${checkpointType.toLowerCase()} claudepoint: ${checkpointName}`;
       await this.logToChangelog('CREATE_CLAUDEPOINT', logMessage, manifest.description);
-      
+
       return {
         success: true,
         name: checkpointName,
@@ -504,8 +504,8 @@ class CheckpointManager {
         type: checkpointType,
         fileCount: checkpointType === 'INCREMENTAL' ? manifest.statistics.filesChanged : files.length,
         changesCount: checkpointType === 'INCREMENTAL' ? manifest.statistics.filesChanged : files.length,
-        size: checkpointType === 'INCREMENTAL' ? 
-          this.formatSize(manifest.statistics.bytesAdded + manifest.statistics.bytesModified) : 
+        size: checkpointType === 'INCREMENTAL' ?
+          this.formatSize(manifest.statistics.bytesAdded + manifest.statistics.bytesModified) :
           this.formatSize(totalSize)
       };
     } catch (error) {
@@ -520,11 +520,11 @@ class CheckpointManager {
     // Create directories for incremental storage
     const addedDir = path.join(checkpointPath, 'added');
     const modifiedDir = path.join(checkpointPath, 'modified');
-    
+
     if (changes.added.length > 0) {
       await fsPromises.mkdir(addedDir, { recursive: true });
     }
-    
+
     if (changes.modified.length > 0) {
       await fsPromises.mkdir(modifiedDir, { recursive: true });
     }
@@ -536,10 +536,10 @@ class CheckpointManager {
     for (const file of changes.added) {
       const srcPath = path.join(this.projectRoot, file);
       const destPath = path.join(addedDir, file);
-      
+
       // Ensure destination directory exists
       await fsPromises.mkdir(path.dirname(destPath), { recursive: true });
-      
+
       try {
         await fsPromises.copyFile(srcPath, destPath);
         const stats = await fsPromises.stat(srcPath);
@@ -553,10 +553,10 @@ class CheckpointManager {
     for (const file of changes.modified) {
       const srcPath = path.join(this.projectRoot, file);
       const destPath = path.join(modifiedDir, file);
-      
+
       // Ensure destination directory exists
       await fsPromises.mkdir(path.dirname(destPath), { recursive: true });
-      
+
       try {
         await fsPromises.copyFile(srcPath, destPath);
         const stats = await fsPromises.stat(srcPath);
@@ -589,7 +589,7 @@ class CheckpointManager {
   async restore(checkpointName, dryRun = false) {
     try {
       const checkpoints = await this.getCheckpoints();
-      const checkpoint = checkpoints.find(cp => 
+      const checkpoint = checkpoints.find(cp =>
         cp.name === checkpointName || cp.name.includes(checkpointName)
       );
 
@@ -614,7 +614,7 @@ class CheckpointManager {
       // Create emergency backup
       const emergencyName = `emergency_backup_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
       const backupResult = await this.create(emergencyName, 'Auto-backup before restore', true);
-      
+
       if (!backupResult.success) {
         return {
           success: false,
@@ -669,7 +669,7 @@ class CheckpointManager {
     // Extract checkpoint files
     const checkpointPath = path.join(this.snapshotsDir, checkpoint.name);
     const tarPath = path.join(checkpointPath, 'files.tar.gz');
-    
+
     await tar.extract({
       file: tarPath,
       cwd: this.projectRoot
@@ -679,7 +679,7 @@ class CheckpointManager {
   async restoreIncrementalCheckpoint(targetCheckpoint) {
     // Build the checkpoint chain from target back to base
     const chain = await this.buildCheckpointChain(targetCheckpoint);
-    
+
     if (chain.length === 0) {
       throw new Error('No restoration chain found - missing base checkpoint');
     }
@@ -699,7 +699,7 @@ class CheckpointManager {
     const chain = [];
     const checkpoints = await this.getCheckpoints();
     const checkpointMap = new Map(checkpoints.map(cp => [cp.name, cp]));
-    
+
     let current = targetCheckpoint;
     chain.unshift(current);
 
@@ -709,7 +709,7 @@ class CheckpointManager {
       if (!baseCheckpoint) {
         throw new Error(`Missing base checkpoint: ${current.baseCheckpoint}`);
       }
-      
+
       chain.unshift(baseCheckpoint);
       current = baseCheckpoint;
     }
@@ -736,10 +736,10 @@ class CheckpointManager {
       for (const file of changes.added) {
         const srcPath = path.join(addedDir, file);
         const destPath = path.join(this.projectRoot, file);
-        
+
         // Ensure destination directory exists
         await fsPromises.mkdir(path.dirname(destPath), { recursive: true });
-        
+
         try {
           await fsPromises.copyFile(srcPath, destPath);
         } catch (error) {
@@ -754,10 +754,10 @@ class CheckpointManager {
       for (const file of changes.modified) {
         const srcPath = path.join(modifiedDir, file);
         const destPath = path.join(this.projectRoot, file);
-        
+
         // Ensure destination directory exists
         await fsPromises.mkdir(path.dirname(destPath), { recursive: true });
-        
+
         try {
           await fsPromises.copyFile(srcPath, destPath);
         } catch (error) {
@@ -808,12 +808,12 @@ class CheckpointManager {
     const config = await this.loadConfig();
     const checkpoints = await this.getCheckpoints();
     const toDelete = [];
-    
+
     // Age-based cleanup (if maxAge > 0)
     if (config.maxAge > 0) {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - config.maxAge);
-      
+
       for (const checkpoint of checkpoints) {
         const checkpointDate = new Date(checkpoint.timestamp);
         if (checkpointDate < cutoffDate) {
@@ -821,14 +821,14 @@ class CheckpointManager {
         }
       }
     }
-    
+
     // Count-based cleanup (keep only maxCheckpoints newest)
     const remainingAfterAge = checkpoints.filter(cp => !toDelete.includes(cp));
     if (remainingAfterAge.length > config.maxCheckpoints) {
       const excessCheckpoints = remainingAfterAge.slice(config.maxCheckpoints);
       toDelete.push(...excessCheckpoints);
     }
-    
+
     // Delete old checkpoints
     for (const checkpoint of toDelete) {
       const checkpointPath = path.join(this.snapshotsDir, checkpoint.name);
@@ -844,12 +844,12 @@ class CheckpointManager {
     const walkAndClean = async (dir) => {
       try {
         const entries = await fsPromises.readdir(dir, { withFileTypes: true });
-        
+
         for (const entry of entries) {
           if (entry.isDirectory()) {
             const fullPath = path.join(dir, entry.name);
             await walkAndClean(fullPath);
-            
+
             // Try to remove if empty
             try {
               const remaining = await fsPromises.readdir(fullPath);
@@ -873,12 +873,12 @@ class CheckpointManager {
     const units = ['B', 'KB', 'MB', 'GB'];
     let size = bytes;
     let unitIndex = 0;
-    
+
     while (size >= 1024 && unitIndex < units.length - 1) {
       size /= 1024;
       unitIndex++;
     }
-    
+
     return `${size.toFixed(1)}${units[unitIndex]}`;
   }
 
@@ -900,7 +900,7 @@ class CheckpointManager {
       };
 
       changelog.unshift(entry); // Add to beginning
-      
+
       // Keep only last 50 entries
       if (changelog.length > 50) {
         changelog = changelog.slice(0, 50);
@@ -917,7 +917,7 @@ class CheckpointManager {
     try {
       const changelogData = await fsPromises.readFile(this.changelogFile, 'utf8');
       const changelog = JSON.parse(changelogData);
-      
+
       // Format timestamps for display
       return changelog.map(entry => ({
         ...entry,
@@ -933,7 +933,7 @@ class CheckpointManager {
     try {
       const checkpoints = await this.getCheckpoints();
       const currentFiles = await this.getProjectFiles();
-      
+
       if (checkpoints.length === 0) {
         return {
           hasLastClaudepoint: false,
@@ -943,10 +943,10 @@ class CheckpointManager {
           totalChanges: currentFiles.length
         };
       }
-      
+
       const lastClaudepoint = checkpoints[0];
       const changes = await this.calculateChanges(currentFiles, lastClaudepoint.name);
-      
+
       return {
         hasLastClaudepoint: true,
         lastClaudepointName: lastClaudepoint.name,
@@ -970,7 +970,7 @@ class CheckpointManager {
   async getConfigurationStatus() {
     const config = await this.loadConfig();
     const checkpoints = await this.getCheckpoints();
-    
+
     return {
       maxClaudepoints: config.maxCheckpoints,
       maxAge: config.maxAge,
@@ -985,7 +985,7 @@ class CheckpointManager {
   async undoLastClaudepoint() {
     try {
       const checkpoints = await this.getCheckpoints();
-      
+
       if (checkpoints.length === 0) {
         return {
           success: false,
@@ -993,7 +993,7 @@ class CheckpointManager {
           noClaudepoints: true
         };
       }
-      
+
       const lastClaudepoint = checkpoints[0];
       return await this.restore(lastClaudepoint.name, false);
     } catch (error) {
@@ -1008,7 +1008,7 @@ class CheckpointManager {
   async extractCheckpointFile(checkpointName, filePath) {
     try {
       const checkpoints = await this.getCheckpoints();
-      const checkpoint = checkpoints.find(cp => 
+      const checkpoint = checkpoints.find(cp =>
         cp.name === checkpointName || cp.name.includes(checkpointName)
       );
 
@@ -1024,7 +1024,7 @@ class CheckpointManager {
         // Extract specific file from full checkpoint
         const checkpointPath = path.join(this.snapshotsDir, checkpoint.name);
         const tarPath = path.join(checkpointPath, 'files.tar.gz');
-        
+
         await tar.extract({
           file: tarPath,
           cwd: tempDir,
@@ -1044,7 +1044,12 @@ class CheckpointManager {
         }
       }
 
-      throw new Error(`File not found in checkpoint: ${filePath}`);
+      // File not found in checkpoint - this means it's a new file
+      // Create an empty file for comparison
+      const emptyFile = path.join(tempDir, filePath);
+      await fsPromises.mkdir(path.dirname(emptyFile), { recursive: true });
+      await fsPromises.writeFile(emptyFile, '', 'utf8');
+      return emptyFile;
     } catch (error) {
       throw new Error(`Failed to extract checkpoint file: ${error.message}`);
     }
@@ -1063,7 +1068,7 @@ class CheckpointManager {
   // 🔄 NEW: Reconstruct file from incremental checkpoint chain
   async reconstructFileFromIncrementalChain(targetCheckpoint, filePath, outputDir) {
     const chain = await this.buildCheckpointChain(targetCheckpoint);
-    
+
     if (chain.length === 0) {
       throw new Error('No reconstruction chain found');
     }
@@ -1072,13 +1077,21 @@ class CheckpointManager {
     const baseCheckpoint = chain[0];
     const baseCheckpointPath = path.join(this.snapshotsDir, baseCheckpoint.name);
     const baseTarPath = path.join(baseCheckpointPath, 'files.tar.gz');
-    
+
     // Extract base file
     await tar.extract({
       file: baseTarPath,
       cwd: outputDir,
       filter: (path) => path === filePath
     });
+
+    // Check if base file was extracted, if not create empty file
+    const baseFile = path.join(outputDir, filePath);
+    if (!(await this.fileExists(baseFile))) {
+      // File didn't exist in base checkpoint, create empty file
+      await fsPromises.mkdir(path.dirname(baseFile), { recursive: true });
+      await fsPromises.writeFile(baseFile, '', 'utf8');
+    }
 
     // Apply incremental changes
     for (let i = 1; i < chain.length; i++) {
@@ -1121,7 +1134,7 @@ class CheckpointManager {
   async openVSCodeDiff(checkpointName, filePath, options = {}) {
     try {
       const { spawn } = await import('child_process');
-      
+
       // Extract checkpoint version of the file
       const checkpointFilePath = await this.extractCheckpointFile(checkpointName, filePath);
       const currentFilePath = path.join(this.projectRoot, filePath);
@@ -1137,11 +1150,11 @@ class CheckpointManager {
 
       // Generate diff title
       const checkpoints = await this.getCheckpoints();
-      const checkpoint = checkpoints.find(cp => 
+      const checkpoint = checkpoints.find(cp =>
         cp.name === checkpointName || cp.name.includes(checkpointName)
       );
       const checkpointDate = checkpoint ? new Date(checkpoint.timestamp).toLocaleString() : 'Unknown';
-      
+
       const leftTitle = `${filePath} (Checkpoint: ${checkpointName})`;
       const rightTitle = `${filePath} (Current)`;
 
@@ -1194,7 +1207,7 @@ class CheckpointManager {
           suggestion: 'Please install VSCode and ensure "code" command is available in your terminal'
         };
       }
-      
+
       return {
         success: false,
         error: error.message
@@ -1206,7 +1219,7 @@ class CheckpointManager {
   async openVSCodeDiffAll(checkpointName, options = {}) {
     try {
       const checkpoints = await this.getCheckpoints();
-      const checkpoint = checkpoints.find(cp => 
+      const checkpoint = checkpoints.find(cp =>
         cp.name === checkpointName || cp.name.includes(checkpointName)
       );
 
@@ -1220,8 +1233,8 @@ class CheckpointManager {
       // Get current files and calculate changes
       const currentFiles = await this.getProjectFiles();
       const changes = await this.calculateChanges(currentFiles, checkpoint.name);
-      
-      const changedFiles = [...changes.modified, ...changes.added.filter(file => 
+
+      const changedFiles = [...changes.modified, ...changes.added.filter(file =>
         // Only show added files that exist in current state
         currentFiles.includes(file)
       )];
@@ -1243,10 +1256,10 @@ class CheckpointManager {
           const result = await this.openVSCodeDiff(checkpoint.name, file, { wait: false });
           results.push({ file, ...result });
         } catch (error) {
-          results.push({ 
-            file, 
-            success: false, 
-            error: error.message 
+          results.push({
+            file,
+            success: false,
+            error: error.message
           });
         }
       }
@@ -1279,11 +1292,11 @@ class CheckpointManager {
   async openTerminalDiff(checkpointName, filePath, options = {}) {
     try {
       const { spawn } = await import('child_process');
-      
+
       // Extract checkpoint version of the file
       const checkpointFilePath = await this.extractCheckpointFile(checkpointName, filePath);
       const currentFilePath = path.join(this.projectRoot, filePath);
-      
+
       // Check if current file exists
       if (!(await this.fileExists(currentFilePath))) {
         return {
@@ -1295,10 +1308,10 @@ class CheckpointManager {
 
       const tool = options.tool || 'terminal';
       const unified = options.unified || 3;
-      
+
       // Select diff command based on tool preference
       let command, args;
-      
+
       switch (tool) {
         case 'git':
           command = 'git';
@@ -1321,27 +1334,27 @@ class CheckpointManager {
           args = ['--color=auto', `-u${unified}`, checkpointFilePath, currentFilePath];
           break;
       }
-      
+
       // For nvim, launch and return immediately (non-blocking)
       if (tool === 'nvim') {
         return new Promise((resolve) => {
-          const child = spawn(command, args, { 
+          const child = spawn(command, args, {
             stdio: 'inherit',
             env: process.env,
             detached: true  // Allow process to run independently
           });
-          
+
           child.on('error', (error) => {
             // Clean up temp file on error only
             this.deleteTempFile(checkpointFilePath);
-            
+
             resolve({
               success: false,
               error: `Failed to launch ${tool}: ${error.message}`,
               suggestion: `Make sure ${command} is installed and in your PATH`
             });
           });
-          
+
           // Return immediately for nvim
           setTimeout(() => {
             resolve({
@@ -1352,25 +1365,25 @@ class CheckpointManager {
               note: 'nvim launched in background - temp file will be cleaned up when nvim exits'
             });
           }, 100);
-          
+
           // Clean up temp file when nvim actually closes (but don't wait)
           child.on('close', () => {
             this.deleteTempFile(checkpointFilePath);
           });
         });
       }
-      
+
       // For other tools, wait for completion
       return new Promise((resolve) => {
-        const child = spawn(command, args, { 
+        const child = spawn(command, args, {
           stdio: 'inherit',
           env: process.env
         });
-        
+
         child.on('close', (code) => {
           // Clean up temp file
           this.deleteTempFile(checkpointFilePath);
-          
+
           resolve({
             success: true,
             file: filePath,
@@ -1378,11 +1391,11 @@ class CheckpointManager {
             exitCode: code
           });
         });
-        
+
         child.on('error', (error) => {
           // Clean up temp file
           this.deleteTempFile(checkpointFilePath);
-          
+
           resolve({
             success: false,
             error: `Failed to launch ${tool}: ${error.message}`,
@@ -1402,7 +1415,7 @@ class CheckpointManager {
   async openTerminalDiffAll(checkpointName, options = {}) {
     try {
       const checkpoints = await this.getCheckpoints();
-      const checkpoint = checkpoints.find(cp => 
+      const checkpoint = checkpoints.find(cp =>
         cp.name === checkpointName || cp.name.includes(checkpointName)
       );
 
@@ -1416,8 +1429,8 @@ class CheckpointManager {
       // Get current files and calculate changes
       const currentFiles = await this.getProjectFiles();
       const changes = await this.calculateChanges(currentFiles, checkpoint.name);
-      
-      const changedFiles = [...changes.modified, ...changes.added.filter(file => 
+
+      const changedFiles = [...changes.modified, ...changes.added.filter(file =>
         // Only show added files that exist in current state
         currentFiles.includes(file)
       )];
@@ -1433,41 +1446,41 @@ class CheckpointManager {
       const tool = options.tool || 'terminal';
       const maxFiles = options.maxFiles || 10;
       const filesToProcess = changedFiles.slice(0, maxFiles);
-      
+
       // For nvim, open all files in one session
       if (tool === 'nvim') {
         return await this.openNvimDiffAll(checkpoint.name, filesToProcess);
       }
-      
+
       // For other tools, show diff for each file sequentially
       const results = [];
-      
+
       console.log(`\n📍 Checkpoint: ${checkpoint.name}`);
       console.log(`📅 Date: ${new Date(checkpoint.timestamp).toLocaleString()}`);
       console.log(`📝 Description: ${checkpoint.description || 'No description'}`);
       console.log(`🔍 Tool: ${tool}\n`);
-      
+
       for (let i = 0; i < filesToProcess.length; i++) {
         const file = filesToProcess[i];
         console.log(`\n📄 File ${i + 1}/${filesToProcess.length}: ${file}`);
         console.log('─'.repeat(60));
-        
+
         try {
-          const result = await this.openTerminalDiff(checkpoint.name, file, { 
-            tool, 
-            unified: options.unified 
+          const result = await this.openTerminalDiff(checkpoint.name, file, {
+            tool,
+            unified: options.unified
           });
           results.push({ file, ...result });
-          
+
           // Add separator between files
           if (i < filesToProcess.length - 1) {
             console.log('\n' + '═'.repeat(60) + '\n');
           }
         } catch (error) {
-          results.push({ 
-            file, 
-            success: false, 
-            error: error.message 
+          results.push({
+            file,
+            success: false,
+            error: error.message
           });
         }
       }
@@ -1501,31 +1514,31 @@ class CheckpointManager {
   async openNvimDiffAll(checkpointName, files) {
     try {
       const { spawn } = await import('child_process');
-      
+
       // Extract all checkpoint files
       const tempFiles = [];
       const nvimArgs = ['-d']; // Start nvim in diff mode
-      
+
       for (const file of files) {
         const checkpointFilePath = await this.extractCheckpointFile(checkpointName, file);
         const currentFilePath = path.join(this.projectRoot, file);
-        
+
         tempFiles.push(checkpointFilePath);
-        
+
         // Add both checkpoint and current file for each file
         nvimArgs.push(checkpointFilePath);
         nvimArgs.push(currentFilePath);
       }
-      
+
       return new Promise((resolve) => {
-        const child = spawn('nvim', nvimArgs, { 
+        const child = spawn('nvim', nvimArgs, {
           stdio: 'inherit'
         });
-        
+
         child.on('close', (code) => {
           // Clean up temp files
           tempFiles.forEach(file => this.deleteTempFile(file));
-          
+
           resolve({
             success: true,
             processed: files.length,
@@ -1533,11 +1546,11 @@ class CheckpointManager {
             exitCode: code
           });
         });
-        
+
         child.on('error', (error) => {
           // Clean up temp files
           tempFiles.forEach(file => this.deleteTempFile(file));
-          
+
           resolve({
             success: false,
             error: `Failed to launch nvim: ${error.message}`,
