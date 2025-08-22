@@ -46,22 +46,38 @@ async function configureMCPServer(scope = 'project') {
       const { execSync } = await import('child_process');
       try {
         // Try to add MCP server via Claude CLI
-        execSync(`claude mcp add claudepoint --command claudepoint`, { stdio: 'inherit' });
+        execSync(`claude mcp add claudepoint claudepoint mcp-server --scope project`, { stdio: 'inherit' });
         return { success: true, scope: 'project' };
       } catch (error) {
         // Fall back to manual instruction
         return {
           success: false,
           manual: true,
-          instructions: 'Run in Claude Code: claude mcp add claudepoint --command claudepoint'
+          instructions: 'Run in Claude Code: claude mcp add claudepoint claudepoint mcp-server --scope project'
         };
       }
     }
 
     // For user/global scope, modify config file
-    const configPath = scope === 'user'
-      ? path.join(os.homedir(), '.claude', 'mcp_servers.json')
-      : path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+    let configPath;
+    const platform = os.platform();
+
+    if (scope === 'user') {
+      // User scope - Claude Code user settings
+      configPath = path.join(os.homedir(), '.claude', 'mcp_servers.json');
+    } else {
+      // Global scope - Claude Desktop config
+      if (platform === 'darwin') {
+        // macOS
+        configPath = path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+      } else if (platform === 'win32') {
+        // Windows
+        configPath = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Claude', 'claude_desktop_config.json');
+      } else {
+        // Linux and others
+        configPath = path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json');
+      }
+    }
 
     let config = {};
     try {
@@ -88,14 +104,32 @@ async function configureMCPServer(scope = 'project') {
     const { execSync } = await import('child_process');
     let claudepointPath;
     try {
-      claudepointPath = execSync('which claudepoint', { encoding: 'utf8' }).trim();
+      // Use appropriate command based on platform
+      const whichCommand = platform === 'win32' ? 'where claudepoint' : 'which claudepoint';
+      claudepointPath = execSync(whichCommand, { encoding: 'utf8' }).trim();
+
+      // On Windows, 'where' might return multiple paths, take the first one
+      if (platform === 'win32' && claudepointPath.includes('\n')) {
+        claudepointPath = claudepointPath.split('\n')[0].trim();
+      }
     } catch {
-      // Fallback - try common paths
-      const commonPaths = [
-        '/usr/local/bin/claudepoint',
-        '/opt/homebrew/bin/claudepoint',
-        path.join(os.homedir(), '.npm-global/bin/claudepoint')
-      ];
+      // Fallback - try common paths based on platform
+      let commonPaths;
+      if (platform === 'win32') {
+        commonPaths = [
+          path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'npm', 'claudepoint.cmd'),
+          path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'nodejs', 'claudepoint.cmd'),
+          'claudepoint'
+        ];
+      } else {
+        commonPaths = [
+          '/usr/local/bin/claudepoint',
+          '/opt/homebrew/bin/claudepoint',
+          path.join(os.homedir(), '.npm-global/bin/claudepoint'),
+          path.join(os.homedir(), '.local/bin/claudepoint')
+        ];
+      }
+
       claudepointPath = commonPaths.find(p => {
         try {
           require('fs').accessSync(p);
@@ -108,7 +142,7 @@ async function configureMCPServer(scope = 'project') {
 
     config.mcpServers.claudepoint = {
       command: claudepointPath,
-      args: []
+      args: ["mcp-server"]
     };
 
     await fsPromises.mkdir(path.dirname(configPath), { recursive: true });
@@ -1187,6 +1221,26 @@ program
     } catch (error) {
       spinner.fail('Failed to create slash commands');
       console.error(chalk.red('Error:'), error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('mcp-server')
+  .description('🚀 Start ClaudePoint as MCP server // Direct MCP server mode')
+  .action(async () => {
+    console.log(chalk.blue('🚀 Starting ClaudePoint MCP server...'));
+    console.log(chalk.gray('   Mode: Direct MCP server startup'));
+    console.log(chalk.gray('   Communication: stdin/stdout'));
+
+    try {
+      // Import and start the MCP server directly
+      await import('./mcp-server.js');
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to start MCP server:'), error.message);
+      if (process.env.DEBUG) {
+        console.error('Error stack:', error.stack);
+      }
       process.exit(1);
     }
   });
