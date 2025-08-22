@@ -189,34 +189,36 @@ Perfect for reviewing what Claude Code has modified in your project.
 
   // Create /diff command
   const diffContent = `---
-description: Terminal diff // Compare checkpoint files with current state using terminal tools
-argument-hint: [checkpoint] [file] [--all] [--tool <tool>]
+description: Visual diff // Compare checkpoint with current files
+argument-hint: [checkpoint] [file] [--all] [--tool]
 ---
 
-🔍 Compare checkpoint files with current state using powerful terminal diff tools.
+🔍 Use the ClaudePoint MCP tool diff_claudepoint to compare files visually.
 
 Parse $ARGUMENTS to extract:
 - checkpoint: Name or partial name of checkpoint to compare against
 - file: Optional specific file to compare
+- tool: Choose your preferred diff tool
+  • vscode: Visual Studio Code (default)
+  • nvim: Neovim
+  • git: Git diff in terminal
 - --all flag: Compare all changed files at once
-- --tool flag: Diff tool to use (terminal, git, delta, nvim)
 
 Steps:
 1. If no checkpoint specified, use list_claudepoints to show available options
-2. Use the CLI command: \`claudepoint diff [checkpoint] [file] --tool terminal --all\`
-3. Available tools:
-   - terminal: Standard diff with colors
-   - git: Git diff with syntax highlighting
-   - delta: Beautiful git diff with enhanced colors
-   - nvim: Interactive diff in Neovim
+2. Use the diff_claudepoint tool from ClaudePoint with parsed arguments
+3. Available options:
+   - Compare specific file: Pass checkpoint and file parameters
+   - Compare all files: Pass checkpoint with all=true
+   - Interactive selection: Show checkpoint list if none specified
 
 Examples:
-- /diff checkpoint_name src/app.js --tool git     # Git diff for specific file
-- /diff checkpoint_name --all --tool delta       # Delta diff for all files
-- /diff checkpoint_name --tool nvim              # Interactive nvim diff
+- /diff checkpoint_name src/app.js                # Compare in VSCode (default)
+- /diff checkpoint_name src/app.js --tool nvim    # Compare using Neovim
+- /diff checkpoint_name --all --tool git          # Compare all in terminal
 - /diff                                          # Show available checkpoints
 
-Perfect for reviewing changes in your terminal with professional diff tools!
+Perfect for visual comparison of your changes using your favorite tools!
 `;
 
   // Create /claudepoint-changelog command
