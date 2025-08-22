@@ -16,8 +16,8 @@ Ever had that moment when Claude is about to hack your entire codebase and you t
 ## Quick Start (literally 30 seconds) ⚡
 
 ```bash
-# Install globally
-npm install -g claudepoint
+# Install from git repository
+npm install -g https://github.com/mkdir700/ClaudePoint
 
 # Navigate to your project
 cd your-awesome-project
