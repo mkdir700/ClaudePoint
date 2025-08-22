@@ -294,7 +294,7 @@ program
     await new Promise(resolve => setTimeout(resolve, 500));
 
     console.log(chalk.cyan.bold('\n    ╔═══════════════════════════════════════╗'));
-    console.log(chalk.cyan.bold('    ║     🕶️  CLAUDEPOINT MATRIX v1.4.4     ║'));
+    console.log(chalk.cyan.bold(`    ║     🕶️  CLAUDEPOINT MATRIX v${packageJson.version}     ║`));
     console.log(chalk.cyan.bold('    ║      >> INITIALIZING HACK MODE <<      ║'));
     console.log(chalk.cyan.bold('    ╚═══════════════════════════════════════╝'));
 
@@ -404,7 +404,7 @@ program
 
         // Now perform setup with chosen options using progress animation
         const steps = [
-          { text: 'Creating .claudepoint vault...', action: async () => {}, delay: 400 },
+          { text: 'Creating .claudepoint vault...', action: async () => { }, delay: 400 },
           { text: 'Loading configuration...', delay: 300 },
           { text: 'Setting up file patterns...', delay: 350 },
         ];
