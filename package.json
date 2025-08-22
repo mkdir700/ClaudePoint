@@ -1,6 +1,6 @@
 {
   "name": "claudepoint",
-  "version": "1.4.5",
+  "version": "1.5.0",
   "description": "The safest way to experiment with Claude Code. Create instant checkpoints, experiment fearlessly, restore instantly.",
   "main": "bin/claudepoint.js",
   "bin": {
