@@ -215,6 +215,132 @@ claudepoint restore "before-debugging"
 # ... apply the actual fix without debug code ...
 ```
 
+## Diff and Comparison
+
+### Visual Diff with Multiple Tools
+
+ClaudePoint provides powerful diff capabilities to compare checkpoints with current files:
+
+```bash
+# Compare specific file with checkpoint
+claudepoint diff checkpoint-name file.js
+
+# Compare all changed files (opens in VSCode by default)
+claudepoint diff checkpoint-name --all
+
+# Use different diff tools
+claudepoint diff checkpoint-name --tool terminal
+claudepoint diff checkpoint-name --tool git
+claudepoint diff checkpoint-name --tool nvim
+
+# Customize terminal diff output
+claudepoint diff checkpoint-name file.js --tool terminal --unified 5
+```
+
+### Diff Tool Options
+
+**VSCode (Default)**
+- Opens side-by-side diff view
+- Best for visual comparison
+- Supports multiple files simultaneously
+
+```bash
+claudepoint diff my-checkpoint --all --tool vscode
+claudepoint diff my-checkpoint file.js --wait  # Wait for VSCode to close
+```
+
+**Terminal**
+- Quick command-line diff
+- Good for CI/CD environments
+- Customizable context lines
+
+```bash
+claudepoint diff my-checkpoint --tool terminal --unified 3
+```
+
+**Git**
+- Uses git's built-in diff
+- Familiar for git users
+- Respects git configuration
+
+```bash
+claudepoint diff my-checkpoint --tool git
+```
+
+**Neovim**
+- For vim users
+- Terminal-based visual diff
+
+```bash
+claudepoint diff my-checkpoint --tool nvim
+```
+
+### Diff Workflow Patterns
+
+**Review Changes Before Checkpoint**
+```bash
+# See what's changed since last checkpoint
+claudepoint changes
+
+# Review specific changes
+claudepoint diff last-checkpoint file.js
+
+# Create checkpoint after review
+claudepoint create --description "Reviewed and approved changes"
+```
+
+**Compare Different Checkpoints**
+```bash
+# Compare current state with specific checkpoint
+claudepoint diff stable-version --all
+
+# Compare specific files across time
+claudepoint diff before-refactor src/main.js
+claudepoint diff after-refactor src/main.js
+```
+
+**Batch File Comparison**
+```bash
+# Compare up to 10 files (default)
+claudepoint diff my-checkpoint --all
+
+# Compare more files
+claudepoint diff my-checkpoint --all --max-files 20
+
+# Review all changes in terminal
+claudepoint diff my-checkpoint --all --tool terminal
+```
+
+### Integration with Development Workflow
+
+**Code Review Pattern**
+```bash
+# 1. Create checkpoint before starting feature
+claudepoint create --description "Before user-auth feature"
+
+# 2. Work on feature...
+
+# 3. Review all changes before committing
+claudepoint diff before-user-auth --all
+
+# 4. Create final checkpoint
+claudepoint create --description "User auth feature complete"
+```
+
+**Debugging Pattern**
+```bash
+# 1. Checkpoint working state
+claudepoint create --description "Working state before debug"
+
+# 2. Add debug code and investigate...
+
+# 3. Compare to see what debug code was added
+claudepoint diff working-state --all --tool terminal
+
+# 4. Restore clean state and apply only the fix
+claudepoint restore working-state
+```
+
 ## Integration with CI/CD
 
 ### Pre-commit Hook
