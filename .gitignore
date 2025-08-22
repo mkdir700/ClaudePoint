@@ -1,6 +1,7 @@
 
 # ClaudPoint checkpoint system
 .checkpoints/
+.claudepoint/
 
 # node_modules
 node_modules/

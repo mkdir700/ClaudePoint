@@ -169,6 +169,34 @@ class ClaudePointMCPServer {
               type: 'object',
               properties: {}
             }
+          },
+          {
+            name: 'diff_claudepoint',
+            description: '🔍 Open VSCode diff // Compare checkpoint with current files visually',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                checkpoint: {
+                  type: 'string',
+                  description: 'Checkpoint name to compare against'
+                },
+                file: {
+                  type: 'string',
+                  description: 'Specific file to compare (optional - if not provided, shows changed files list)'
+                },
+                all: {
+                  type: 'boolean',
+                  description: 'Compare all changed files at once',
+                  default: false
+                },
+                maxFiles: {
+                  type: 'number',
+                  description: 'Maximum number of files to compare when using all option',
+                  default: 10
+                }
+              },
+              required: ['checkpoint']
+            }
           }
         ]
       };
@@ -197,6 +225,9 @@ class ClaudePointMCPServer {
             
           case 'configure_claudepoint':
             return await this.handleConfigureClaudepoint(args);
+          
+          case 'diff_claudepoint':
+            return await this.handleDiffClaudepoint(args);
           
           case 'setup_claudepoint':
             return await this.handleSetup(args);
@@ -821,7 +852,7 @@ class ClaudePointMCPServer {
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
       console.error('ClaudePoint MCP server running on stdio');
-      console.error('Available tools: setup_claudepoint, create_claudepoint, list_claudepoints, restore_claudepoint, undo_claudepoint, get_changes, configure_claudepoint, get_changelog, set_changelog, init_slash_commands');
+      console.error('Available tools: setup_claudepoint, create_claudepoint, list_claudepoints, restore_claudepoint, undo_claudepoint, get_changes, configure_claudepoint, diff_claudepoint, get_changelog, set_changelog, init_slash_commands');
       
       // Keep the process alive
       process.on('SIGINT', () => {
@@ -838,6 +869,188 @@ class ClaudePointMCPServer {
       console.error('Failed to start MCP server:', error);
       console.error('Error details:', error.stack);
       process.exit(1);
+    }
+  }
+
+  async handleDiffClaudepoint(args) {
+    const { checkpoint, file, all, maxFiles } = args || {};
+    
+    if (!checkpoint) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: '🚨 No checkpoint specified. Please provide a checkpoint name to compare against.'
+          }
+        ]
+      };
+    }
+    
+    try {
+      if (all) {
+        // Compare all changed files
+        const result = await this.manager.openVSCodeDiffAll(checkpoint, {
+          maxFiles: maxFiles || 10,
+          wait: false
+        });
+        
+        if (!result.success) {
+          if (result.noChanges) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `✨ No changes to compare\n📍 Checkpoint: ${checkpoint}\n🎯 Everything is in sync!`
+                }
+              ]
+            };
+          }
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `🚨 Diff failed: ${result.error}`
+              }
+            ]
+          };
+        }
+        
+        let output = `🎯 Opened ${result.successful} diffs in VSCode\n`;
+        output += `📍 Checkpoint: ${result.checkpointInfo.name}\n`;
+        output += `   Created: ${result.checkpointInfo.date}\n`;
+        output += `   Description: ${result.checkpointInfo.description}\n`;
+        
+        if (result.failed > 0) {
+          output += `⚠️  ${result.failed} files failed to open\n`;
+        }
+        
+        if (result.skipped > 0) {
+          output += `📋 ${result.skipped} files skipped (increase maxFiles if needed)\n`;
+        }
+        
+        output += '\n💡 Files opened in VSCode diff view - check your editor!';
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: output
+            }
+          ]
+        };
+        
+      } else if (file) {
+        // Compare specific file
+        const result = await this.manager.openVSCodeDiff(checkpoint, file, {
+          wait: false
+        });
+        
+        if (!result.success) {
+          let output = `🚨 Diff failed: ${result.error}`;
+          if (result.suggestion) {
+            output += `\n💡 ${result.suggestion}`;
+          }
+          
+          return {
+            content: [
+              {
+                type: 'text',
+                text: output
+              }
+            ]
+          };
+        }
+        
+        let output = `🎯 Opened diff in VSCode: ${file}\n`;
+        output += `📍 Checkpoint: ${result.checkpointInfo.name}\n`;
+        output += `   Created: ${result.checkpointInfo.date}\n`;
+        output += `   Description: ${result.checkpointInfo.description}\n`;
+        output += '\n💡 Comparing: Checkpoint vs Current';
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: output
+            }
+          ]
+        };
+        
+      } else {
+        // Show changed files and usage instructions
+        const changes = await this.manager.getChangedFilesSinceLastClaudepoint();
+        
+        if (!changes.hasLastClaudepoint) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: '🆕 No previous checkpoint found\n💡 Create a checkpoint first, then make changes to see diffs'
+              }
+            ]
+          };
+        }
+        
+        if (changes.totalChanges === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `✨ No changes detected\n📍 Since checkpoint: ${changes.lastClaudepointName}\n🎯 Everything is in sync!`
+              }
+            ]
+          };
+        }
+        
+        const changedFiles = [...changes.modified, ...changes.added];
+        
+        if (changedFiles.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: '💡 Only deletions found - nothing to compare\nUse all=true parameter to see all changes including deletions.'
+              }
+            ]
+          };
+        }
+        
+        let output = `🎯 Found ${changes.totalChanges} changed files since ${changes.lastClaudepointName}:\n\n`;
+        output += '📁 Changed files:\n';
+        
+        changedFiles.slice(0, 10).forEach((file, index) => {
+          const prefix = changes.modified.includes(file) ? '📝' : '➕';
+          output += `   ${index + 1}. ${prefix} ${file}\n`;
+        });
+        
+        if (changedFiles.length > 10) {
+          output += `   ... and ${changedFiles.length - 10} more files\n`;
+        }
+        
+        output += '\n🚀 To compare files:\n';
+        output += `• Use file parameter for specific file: {"checkpoint": "${checkpoint}", "file": "src/example.js"}\n`;
+        output += `• Use all=true for all changed files: {"checkpoint": "${checkpoint}", "all": true}`;
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: output
+            }
+          ]
+        };
+      }
+      
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `🚨 Diff operation failed: ${error.message}`
+          }
+        ]
+      };
     }
   }
 }

@@ -1003,6 +1003,567 @@ class CheckpointManager {
       };
     }
   }
+
+  // 🔍 NEW: Extract checkpoint file for diff comparison
+  async extractCheckpointFile(checkpointName, filePath) {
+    try {
+      const checkpoints = await this.getCheckpoints();
+      const checkpoint = checkpoints.find(cp => 
+        cp.name === checkpointName || cp.name.includes(checkpointName)
+      );
+
+      if (!checkpoint) {
+        throw new Error(`Checkpoint not found: ${checkpointName}`);
+      }
+
+      // Create temporary directory for extraction
+      const tempDir = path.join(os.tmpdir(), 'claudepoint-diff', checkpoint.name);
+      await fsPromises.mkdir(tempDir, { recursive: true });
+
+      if (checkpoint.type === 'FULL' || !checkpoint.type) {
+        // Extract specific file from full checkpoint
+        const checkpointPath = path.join(this.snapshotsDir, checkpoint.name);
+        const tarPath = path.join(checkpointPath, 'files.tar.gz');
+        
+        await tar.extract({
+          file: tarPath,
+          cwd: tempDir,
+          filter: (path) => path === filePath
+        });
+
+        const extractedFile = path.join(tempDir, filePath);
+        if (await this.fileExists(extractedFile)) {
+          return extractedFile;
+        }
+      } else {
+        // Handle incremental checkpoint (reconstruct file state)
+        await this.reconstructFileFromIncrementalChain(checkpoint, filePath, tempDir);
+        const reconstructedFile = path.join(tempDir, filePath);
+        if (await this.fileExists(reconstructedFile)) {
+          return reconstructedFile;
+        }
+      }
+
+      throw new Error(`File not found in checkpoint: ${filePath}`);
+    } catch (error) {
+      throw new Error(`Failed to extract checkpoint file: ${error.message}`);
+    }
+  }
+
+  // 🔧 Helper: Check if file exists
+  async fileExists(filePath) {
+    try {
+      await fsPromises.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // 🔄 NEW: Reconstruct file from incremental checkpoint chain
+  async reconstructFileFromIncrementalChain(targetCheckpoint, filePath, outputDir) {
+    const chain = await this.buildCheckpointChain(targetCheckpoint);
+    
+    if (chain.length === 0) {
+      throw new Error('No reconstruction chain found');
+    }
+
+    // Start with base checkpoint
+    const baseCheckpoint = chain[0];
+    const baseCheckpointPath = path.join(this.snapshotsDir, baseCheckpoint.name);
+    const baseTarPath = path.join(baseCheckpointPath, 'files.tar.gz');
+    
+    // Extract base file
+    await tar.extract({
+      file: baseTarPath,
+      cwd: outputDir,
+      filter: (path) => path === filePath
+    });
+
+    // Apply incremental changes
+    for (let i = 1; i < chain.length; i++) {
+      const incrementalCheckpoint = chain[i];
+      await this.applyIncrementalFileChange(incrementalCheckpoint, filePath, outputDir);
+    }
+  }
+
+  // 🔄 NEW: Apply incremental file change for specific file
+  async applyIncrementalFileChange(checkpoint, filePath, outputDir) {
+    const checkpointPath = path.join(this.snapshotsDir, checkpoint.name);
+    const changes = checkpoint.changes;
+
+    if (!changes) return;
+
+    const outputFilePath = path.join(outputDir, filePath);
+
+    // Handle added/modified files
+    if (changes.added?.includes(filePath)) {
+      const srcPath = path.join(checkpointPath, 'added', filePath);
+      if (await this.fileExists(srcPath)) {
+        await fsPromises.mkdir(path.dirname(outputFilePath), { recursive: true });
+        await fsPromises.copyFile(srcPath, outputFilePath);
+      }
+    } else if (changes.modified?.includes(filePath)) {
+      const srcPath = path.join(checkpointPath, 'modified', filePath);
+      if (await this.fileExists(srcPath)) {
+        await fsPromises.mkdir(path.dirname(outputFilePath), { recursive: true });
+        await fsPromises.copyFile(srcPath, outputFilePath);
+      }
+    } else if (changes.deleted?.includes(filePath)) {
+      // File was deleted in this checkpoint
+      if (await this.fileExists(outputFilePath)) {
+        await fsPromises.unlink(outputFilePath);
+      }
+    }
+  }
+
+  // 🎯 NEW: Open VSCode diff for file comparison
+  async openVSCodeDiff(checkpointName, filePath, options = {}) {
+    try {
+      const { spawn } = await import('child_process');
+      
+      // Extract checkpoint version of the file
+      const checkpointFilePath = await this.extractCheckpointFile(checkpointName, filePath);
+      const currentFilePath = path.join(this.projectRoot, filePath);
+
+      // Check if current file exists
+      if (!(await this.fileExists(currentFilePath))) {
+        return {
+          success: false,
+          error: `Current file not found: ${filePath}`,
+          suggestion: 'File may have been deleted since checkpoint'
+        };
+      }
+
+      // Generate diff title
+      const checkpoints = await this.getCheckpoints();
+      const checkpoint = checkpoints.find(cp => 
+        cp.name === checkpointName || cp.name.includes(checkpointName)
+      );
+      const checkpointDate = checkpoint ? new Date(checkpoint.timestamp).toLocaleString() : 'Unknown';
+      
+      const leftTitle = `${filePath} (Checkpoint: ${checkpointName})`;
+      const rightTitle = `${filePath} (Current)`;
+
+      // Open VSCode diff
+      const vscodeArgs = [
+        '--diff',
+        checkpointFilePath,
+        currentFilePath,
+        '--title', `${leftTitle} ↔ ${rightTitle}`
+      ];
+
+      if (options.wait) {
+        vscodeArgs.push('--wait');
+      }
+
+      const vscodeProcess = spawn('code', vscodeArgs, {
+        stdio: 'inherit',
+        detached: !options.wait
+      });
+
+      if (options.wait) {
+        return new Promise((resolve) => {
+          vscodeProcess.on('close', (code) => {
+            resolve({
+              success: code === 0,
+              checkpointFile: checkpointFilePath,
+              currentFile: currentFilePath,
+              exitCode: code
+            });
+          });
+        });
+      }
+
+      return {
+        success: true,
+        checkpointFile: checkpointFilePath,
+        currentFile: currentFilePath,
+        message: `Opened diff in VSCode: ${filePath}`,
+        checkpointInfo: {
+          name: checkpoint?.name,
+          date: checkpointDate,
+          description: checkpoint?.description
+        }
+      };
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return {
+          success: false,
+          error: 'VSCode not found in PATH',
+          suggestion: 'Please install VSCode and ensure "code" command is available in your terminal'
+        };
+      }
+      
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  // 🔍 NEW: Open VSCode diff for all changed files
+  async openVSCodeDiffAll(checkpointName, options = {}) {
+    try {
+      const checkpoints = await this.getCheckpoints();
+      const checkpoint = checkpoints.find(cp => 
+        cp.name === checkpointName || cp.name.includes(checkpointName)
+      );
+
+      if (!checkpoint) {
+        return {
+          success: false,
+          error: `Checkpoint not found: ${checkpointName}`
+        };
+      }
+
+      // Get current files and calculate changes
+      const currentFiles = await this.getProjectFiles();
+      const changes = await this.calculateChanges(currentFiles, checkpoint.name);
+      
+      const changedFiles = [...changes.modified, ...changes.added.filter(file => 
+        // Only show added files that exist in current state
+        currentFiles.includes(file)
+      )];
+
+      if (changedFiles.length === 0) {
+        return {
+          success: false,
+          error: 'No changed files to compare',
+          noChanges: true
+        };
+      }
+
+      const results = [];
+      const maxFiles = options.maxFiles || 10; // Limit to prevent overwhelming VSCode
+      const filesToProcess = changedFiles.slice(0, maxFiles);
+
+      for (const file of filesToProcess) {
+        try {
+          const result = await this.openVSCodeDiff(checkpoint.name, file, { wait: false });
+          results.push({ file, ...result });
+        } catch (error) {
+          results.push({ 
+            file, 
+            success: false, 
+            error: error.message 
+          });
+        }
+      }
+
+      const successful = results.filter(r => r.success).length;
+      const failed = results.filter(r => !r.success).length;
+
+      return {
+        success: successful > 0,
+        processed: filesToProcess.length,
+        successful,
+        failed,
+        skipped: Math.max(0, changedFiles.length - maxFiles),
+        results,
+        checkpointInfo: {
+          name: checkpoint.name,
+          date: new Date(checkpoint.timestamp).toLocaleString(),
+          description: checkpoint.description
+        }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  // 🔍 NEW: Open terminal diff for a single file
+  async openTerminalDiff(checkpointName, filePath, options = {}) {
+    try {
+      const { spawn } = await import('child_process');
+      
+      // Extract checkpoint version of the file
+      const checkpointFilePath = await this.extractCheckpointFile(checkpointName, filePath);
+      const currentFilePath = path.join(this.projectRoot, filePath);
+      
+      // Check if current file exists
+      if (!(await this.fileExists(currentFilePath))) {
+        return {
+          success: false,
+          error: `Current file not found: ${filePath}`,
+          suggestion: 'File may have been deleted since checkpoint'
+        };
+      }
+
+      const tool = options.tool || 'terminal';
+      const unified = options.unified || 3;
+      
+      // Select diff command based on tool preference
+      let command, args;
+      
+      switch (tool) {
+        case 'git':
+          command = 'git';
+          args = ['diff', '--no-index', '--color=always', `--unified=${unified}`, checkpointFilePath, currentFilePath];
+          break;
+        case 'nvim':
+          command = 'nvim';
+          args = ['-d', checkpointFilePath, currentFilePath];
+          break;
+        case 'delta':
+          // Use delta as pager for git diff
+          command = 'git';
+          args = ['diff', '--no-index', '--color=always', `--unified=${unified}`, checkpointFilePath, currentFilePath];
+          process.env.PAGER = 'delta';
+          break;
+        case 'terminal':
+        default:
+          // Use system diff command
+          command = 'diff';
+          args = ['--color=auto', `-u${unified}`, checkpointFilePath, currentFilePath];
+          break;
+      }
+      
+      // For nvim, launch and return immediately (non-blocking)
+      if (tool === 'nvim') {
+        return new Promise((resolve) => {
+          const child = spawn(command, args, { 
+            stdio: 'inherit',
+            env: process.env,
+            detached: true  // Allow process to run independently
+          });
+          
+          child.on('error', (error) => {
+            // Clean up temp file on error only
+            this.deleteTempFile(checkpointFilePath);
+            
+            resolve({
+              success: false,
+              error: `Failed to launch ${tool}: ${error.message}`,
+              suggestion: `Make sure ${command} is installed and in your PATH`
+            });
+          });
+          
+          // Return immediately for nvim
+          setTimeout(() => {
+            resolve({
+              success: true,
+              file: filePath,
+              tool: tool,
+              launched: true,
+              note: 'nvim launched in background - temp file will be cleaned up when nvim exits'
+            });
+          }, 100);
+          
+          // Clean up temp file when nvim actually closes (but don't wait)
+          child.on('close', () => {
+            this.deleteTempFile(checkpointFilePath);
+          });
+        });
+      }
+      
+      // For other tools, wait for completion
+      return new Promise((resolve) => {
+        const child = spawn(command, args, { 
+          stdio: 'inherit',
+          env: process.env
+        });
+        
+        child.on('close', (code) => {
+          // Clean up temp file
+          this.deleteTempFile(checkpointFilePath);
+          
+          resolve({
+            success: true,
+            file: filePath,
+            tool: tool,
+            exitCode: code
+          });
+        });
+        
+        child.on('error', (error) => {
+          // Clean up temp file
+          this.deleteTempFile(checkpointFilePath);
+          
+          resolve({
+            success: false,
+            error: `Failed to launch ${tool}: ${error.message}`,
+            suggestion: `Make sure ${command} is installed and in your PATH`
+          });
+        });
+      });
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  // 🔍 NEW: Open terminal diff for all changed files
+  async openTerminalDiffAll(checkpointName, options = {}) {
+    try {
+      const checkpoints = await this.getCheckpoints();
+      const checkpoint = checkpoints.find(cp => 
+        cp.name === checkpointName || cp.name.includes(checkpointName)
+      );
+
+      if (!checkpoint) {
+        return {
+          success: false,
+          error: `Checkpoint not found: ${checkpointName}`
+        };
+      }
+
+      // Get current files and calculate changes
+      const currentFiles = await this.getProjectFiles();
+      const changes = await this.calculateChanges(currentFiles, checkpoint.name);
+      
+      const changedFiles = [...changes.modified, ...changes.added.filter(file => 
+        // Only show added files that exist in current state
+        currentFiles.includes(file)
+      )];
+
+      if (changedFiles.length === 0) {
+        return {
+          success: false,
+          error: 'No changed files to compare',
+          noChanges: true
+        };
+      }
+
+      const tool = options.tool || 'terminal';
+      const maxFiles = options.maxFiles || 10;
+      const filesToProcess = changedFiles.slice(0, maxFiles);
+      
+      // For nvim, open all files in one session
+      if (tool === 'nvim') {
+        return await this.openNvimDiffAll(checkpoint.name, filesToProcess);
+      }
+      
+      // For other tools, show diff for each file sequentially
+      const results = [];
+      
+      console.log(`\n📍 Checkpoint: ${checkpoint.name}`);
+      console.log(`📅 Date: ${new Date(checkpoint.timestamp).toLocaleString()}`);
+      console.log(`📝 Description: ${checkpoint.description || 'No description'}`);
+      console.log(`🔍 Tool: ${tool}\n`);
+      
+      for (let i = 0; i < filesToProcess.length; i++) {
+        const file = filesToProcess[i];
+        console.log(`\n📄 File ${i + 1}/${filesToProcess.length}: ${file}`);
+        console.log('─'.repeat(60));
+        
+        try {
+          const result = await this.openTerminalDiff(checkpoint.name, file, { 
+            tool, 
+            unified: options.unified 
+          });
+          results.push({ file, ...result });
+          
+          // Add separator between files
+          if (i < filesToProcess.length - 1) {
+            console.log('\n' + '═'.repeat(60) + '\n');
+          }
+        } catch (error) {
+          results.push({ 
+            file, 
+            success: false, 
+            error: error.message 
+          });
+        }
+      }
+
+      const successful = results.filter(r => r.success).length;
+      const failed = results.filter(r => !r.success).length;
+
+      return {
+        success: successful > 0,
+        processed: filesToProcess.length,
+        successful,
+        failed,
+        skipped: Math.max(0, changedFiles.length - maxFiles),
+        results,
+        checkpointInfo: {
+          name: checkpoint.name,
+          date: new Date(checkpoint.timestamp).toLocaleString(),
+          description: checkpoint.description,
+          tool: tool
+        }
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  // 🔍 Helper: Open multiple files in nvim diff mode
+  async openNvimDiffAll(checkpointName, files) {
+    try {
+      const { spawn } = await import('child_process');
+      
+      // Extract all checkpoint files
+      const tempFiles = [];
+      const nvimArgs = ['-d']; // Start nvim in diff mode
+      
+      for (const file of files) {
+        const checkpointFilePath = await this.extractCheckpointFile(checkpointName, file);
+        const currentFilePath = path.join(this.projectRoot, file);
+        
+        tempFiles.push(checkpointFilePath);
+        
+        // Add both checkpoint and current file for each file
+        nvimArgs.push(checkpointFilePath);
+        nvimArgs.push(currentFilePath);
+      }
+      
+      return new Promise((resolve) => {
+        const child = spawn('nvim', nvimArgs, { 
+          stdio: 'inherit'
+        });
+        
+        child.on('close', (code) => {
+          // Clean up temp files
+          tempFiles.forEach(file => this.deleteTempFile(file));
+          
+          resolve({
+            success: true,
+            processed: files.length,
+            tool: 'nvim',
+            exitCode: code
+          });
+        });
+        
+        child.on('error', (error) => {
+          // Clean up temp files
+          tempFiles.forEach(file => this.deleteTempFile(file));
+          
+          resolve({
+            success: false,
+            error: `Failed to launch nvim: ${error.message}`,
+            suggestion: 'Make sure nvim is installed and in your PATH'
+          });
+        });
+      });
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  // 🔍 Helper: Delete temporary files
+  deleteTempFile(filePath) {
+    try {
+      if (filePath && fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (error) {
+      // Ignore cleanup errors
+      console.warn(`Warning: Could not clean up temp file: ${filePath}`);
+    }
+  }
 }
 
 export default CheckpointManager;

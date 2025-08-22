@@ -187,6 +187,38 @@ Steps:
 Perfect for reviewing what Claude Code has modified in your project.
 `;
 
+  // Create /diff command
+  const diffContent = `---
+description: Terminal diff // Compare checkpoint files with current state using terminal tools
+argument-hint: [checkpoint] [file] [--all] [--tool <tool>]
+---
+
+🔍 Compare checkpoint files with current state using powerful terminal diff tools.
+
+Parse $ARGUMENTS to extract:
+- checkpoint: Name or partial name of checkpoint to compare against
+- file: Optional specific file to compare
+- --all flag: Compare all changed files at once
+- --tool flag: Diff tool to use (terminal, git, delta, nvim)
+
+Steps:
+1. If no checkpoint specified, use list_claudepoints to show available options
+2. Use the CLI command: \`claudepoint diff [checkpoint] [file] --tool terminal --all\`
+3. Available tools:
+   - terminal: Standard diff with colors
+   - git: Git diff with syntax highlighting
+   - delta: Beautiful git diff with enhanced colors
+   - nvim: Interactive diff in Neovim
+
+Examples:
+- /diff checkpoint_name src/app.js --tool git     # Git diff for specific file
+- /diff checkpoint_name --all --tool delta       # Delta diff for all files
+- /diff checkpoint_name --tool nvim              # Interactive nvim diff
+- /diff                                          # Show available checkpoints
+
+Perfect for reviewing changes in your terminal with professional diff tools!
+`;
+
   // Create /claudepoint-changelog command
   const claudepointChangelogContent = `---
 description: View your coding adventure timeline // Development history
@@ -252,6 +284,7 @@ Perfect for getting started with ClaudePoint in any project.
   await fsPromises.writeFile(path.join(commandsDir, 'claudepoint-list.md'), claudepointListContent);
   await fsPromises.writeFile(path.join(commandsDir, 'claudepoint-restore.md'), claudepointRestoreContent);
   await fsPromises.writeFile(path.join(commandsDir, 'changes.md'), changesContent);
+  await fsPromises.writeFile(path.join(commandsDir, 'diff.md'), diffContent);
   await fsPromises.writeFile(path.join(commandsDir, 'claudepoint-changelog.md'), claudepointChangelogContent);
   await fsPromises.writeFile(path.join(commandsDir, 'claudepoint-changelog-add.md'), claudepointChangelogAddContent);
   await fsPromises.writeFile(path.join(commandsDir, 'ultrathink.md'), ultrathinkContent);
@@ -264,6 +297,7 @@ Perfect for getting started with ClaudePoint in any project.
       'claudepoint-list',
       'claudepoint-restore', 
       'changes',
+      'diff',
       'claudepoint-changelog',
       'claudepoint-changelog-add',
       'ultrathink'
